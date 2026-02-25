@@ -1,6 +1,6 @@
 import fs from 'node:fs';
+import path from 'node:path';
 import os from 'node:os';
-import { execFile } from 'node:child_process';
 
 export interface PermGroup {
   category: string;
@@ -29,72 +29,69 @@ export function countDeprecated(results: ScanResult[]): { path: string; count: n
   return out;
 }
 
-function isWritable(f: string): boolean {
-  try { fs.accessSync(f, fs.constants.W_OK); return true; } catch { return false; }
-}
+const SKIP = new Set([
+  'node_modules', '.git', '.cache', '.local', '.npm', '.nvm', '.bun',
+  '.vscode', '.docker', '.cargo', '.rustup', 'go', '.gradle', '.m2',
+  '.Trash', 'Pictures', 'Music', 'Videos', 'Downloads',
+  'snap', '.snap',
+  'Library', 'Applications', '.Spotlight-V100', '.fseventsd',
+  'Movies', 'Photos', '.iCloud',
+]);
 
-export function findSettingsFiles(searchDir: string, onProgress?: (count: number) => void, debug = false): Promise<string[]> {
-  const prune = [
-    // common
-    'node_modules', '.git', '.cache', '.local', '.npm', '.nvm', '.bun',
-    '.vscode', '.docker', '.cargo', '.rustup', 'go', '.gradle', '.m2',
-    '.Trash', 'Pictures', 'Music', 'Videos', 'Downloads',
-    // linux
-    'snap', '.snap',
-    // macOS
-    'Library', 'Applications', '.Spotlight-V100', '.fseventsd',
-    'Movies', 'Photos', '.iCloud',
-  ];
-  const pruneArgs = prune.flatMap((d) => ['-name', d, '-o']).slice(0, -1);
-
-  const findArgs = [
-    searchDir,
-    '(', ...pruneArgs, ')', '-prune',
-    '-o', '-path', '*/.claude/settings*.json', '-type', 'f', '-print',
-  ];
-
-  if (debug) {
-    console.error(`\n  [debug] find ${findArgs.join(' ')}`);
-    console.error(`  [debug] prune: ${prune.join(', ')}`);
-  }
-
+export async function findSettingsFiles(
+  searchDir: string,
+  onProgress?: (count: number) => void,
+  debug = false,
+): Promise<string[]> {
+  const results: string[] = [];
   const t0 = Date.now();
 
-  return new Promise((resolve) => {
-    const results: string[] = [];
-    let buf = '';
-    const child = execFile('find', findArgs, { encoding: 'utf8', timeout: 30000 });
+  async function walk(dir: string): Promise<void> {
+    let entries: fs.Dirent[];
+    try {
+      entries = await fs.promises.readdir(dir, { withFileTypes: true });
+    } catch {
+      return; // permission denied, etc.
+    }
 
-    child.stderr?.on('data', (chunk: string) => {
-      if (debug) process.stderr.write(`  [debug] stderr: ${chunk}`);
-    });
+    for (const entry of entries) {
+      const name = entry.name;
 
-    child.stdout?.on('data', (chunk: string) => {
-      buf += chunk;
-      const lines = buf.split('\n');
-      buf = lines.pop() || '';
-      for (const line of lines) {
-        if (line && isWritable(line)) results.push(line);
+      if (name === '.claude' && entry.isDirectory()) {
+        // found a .claude dir — check for settings files inside
+        const claudeDir = path.join(dir, '.claude');
+        let inner: string[];
+        try { inner = await fs.promises.readdir(claudeDir); } catch { continue; }
+        for (const f of inner) {
+          if (f.startsWith('settings') && f.endsWith('.json')) {
+            const full = path.join(claudeDir, f);
+            try {
+              await fs.promises.access(full, fs.constants.W_OK);
+              results.push(full);
+              onProgress?.(results.length);
+              if (debug) console.error(`  [debug] found: ${full}`);
+            } catch { /* not writable */ }
+          }
+        }
+        continue; // don't recurse into .claude
       }
-      onProgress?.(results.length);
-    });
 
-    child.on('close', (code) => {
-      if (buf && isWritable(buf)) results.push(buf);
-      onProgress?.(results.length);
-      if (debug) {
-        console.error(`  [debug] find exited with code ${code} in ${Date.now() - t0}ms`);
-        console.error(`  [debug] found ${results.length} files`);
-        results.forEach((f) => console.error(`  [debug]   ${f}`));
-      }
-      resolve(results);
-    });
+      if (!entry.isDirectory()) continue;
+      if (SKIP.has(name)) continue;
+      if (name.startsWith('.') && name !== '.claude') continue; // skip other hidden dirs
 
-    child.on('error', (err) => {
-      if (debug) console.error(`  [debug] find error: ${err.message}`);
-      resolve(results);
-    });
-  });
+      await walk(path.join(dir, name));
+    }
+  }
+
+  await walk(searchDir);
+
+  if (debug) {
+    console.error(`  [debug] scan completed in ${Date.now() - t0}ms`);
+    console.error(`  [debug] found ${results.length} files`);
+  }
+
+  return results;
 }
 
 export function scanFile(filePath: string): ScanResult | null {
