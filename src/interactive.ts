@@ -90,7 +90,7 @@ export function startInteractive(
       if (state.view === 'list') {
         if (key.name === 'up') state.cursor = Math.max(0, state.cursor - 1);
         else if (key.name === 'down') state.cursor = Math.min(withPerms.length - 1, state.cursor + 1);
-        else if (key.name === 'return') {
+        else if (key.name === 'return' && withPerms[state.cursor]?.totalCount > 0) {
           state.selectedProject = state.cursor;
           state.detailCursor = 0;
           state.detailScroll = 0;
