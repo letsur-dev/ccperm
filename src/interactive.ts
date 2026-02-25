@@ -3,13 +3,6 @@ import { GREEN, YELLOW, CYAN, DIM, BOLD, NC } from './colors.js';
 import { MergedResult } from './aggregator.js';
 import { ScanResult } from './scanner.js';
 
-interface DetailRow {
-  type: 'file' | 'category' | 'item';
-  label: string;
-  key?: string; // for toggle
-  indent: number;
-}
-
 interface TuiState {
   view: 'list' | 'detail';
   cursor: number;
@@ -18,6 +11,36 @@ interface TuiState {
   detailCursor: number;
   detailScroll: number;
   expanded: Set<string>;
+}
+
+// strip ANSI escape codes for visible length
+function visLen(s: string): number {
+  return s.replace(/\x1b\[[0-9;]*m/g, '').length;
+}
+
+function boxLine(text: string, width: number): string {
+  const vis = visLen(text);
+  const padRight = Math.max(0, width - vis - 1);
+  return `${DIM}│${NC} ${text}${' '.repeat(padRight)}${DIM}│${NC}`;
+}
+
+function boxTop(title: string, info: string, width: number): string {
+  const inner = width - 2;
+  const titlePart = ` ${title} `;
+  const infoPart = info ? ` ${info} ` : '';
+  const fill = Math.max(0, inner - titlePart.length - infoPart.length);
+  return `${DIM}┌${titlePart}${'─'.repeat(fill)}${infoPart}┐${NC}`;
+}
+
+function boxBottom(hint: string, width: number): string {
+  const inner = width - 2;
+  const hintPart = ` ${hint} `;
+  const fill = Math.max(0, inner - hintPart.length);
+  return `${DIM}└${'─'.repeat(fill)}${hintPart}┘${NC}`;
+}
+
+function boxSep(width: number): string {
+  return `${DIM}├${'─'.repeat(width - 2)}┤${NC}`;
 }
 
 export function startInteractive(
@@ -45,18 +68,13 @@ export function startInteractive(
       process.stdin.pause();
       process.stdin.removeListener('keypress', onKey);
       process.removeListener('SIGINT', onSigint);
-      // show cursor
       process.stdout.write('\x1b[?25h');
     };
 
-    const onSigint = () => {
-      cleanup();
-      process.exit(0);
-    };
+    const onSigint = () => { cleanup(); process.exit(0); };
     process.on('SIGINT', onSigint);
 
     const render = () => {
-      // clear screen + move cursor home + hide cursor
       process.stdout.write('\x1b[2J\x1b[H\x1b[?25l');
       if (state.view === 'list') renderList(state, withPerms, emptyCount);
       else renderDetail(state, withPerms, results);
@@ -65,19 +83,12 @@ export function startInteractive(
     const onKey = (_str: string | undefined, key: readline.Key) => {
       if (!key) return;
 
-      if (key.name === 'q') {
-        cleanup();
-        console.log('');
-        resolve();
-        return;
-      }
+      if (key.name === 'q') { cleanup(); console.log(''); resolve(); return; }
 
       if (state.view === 'list') {
-        if (key.name === 'up') {
-          state.cursor = Math.max(0, state.cursor - 1);
-        } else if (key.name === 'down') {
-          state.cursor = Math.min(withPerms.length - 1, state.cursor + 1);
-        } else if (key.name === 'return') {
+        if (key.name === 'up') state.cursor = Math.max(0, state.cursor - 1);
+        else if (key.name === 'down') state.cursor = Math.min(withPerms.length - 1, state.cursor + 1);
+        else if (key.name === 'return') {
           state.selectedProject = state.cursor;
           state.detailCursor = 0;
           state.detailScroll = 0;
@@ -85,7 +96,6 @@ export function startInteractive(
           state.view = 'detail';
         }
       } else {
-        // detail view
         if (key.name === 'escape' || key.name === 'backspace') {
           state.view = 'list';
           state.detailCursor = 0;
@@ -95,7 +105,6 @@ export function startInteractive(
         } else if (key.name === 'down') {
           state.detailCursor++;
         } else if (key.name === 'return') {
-          // toggle handled in renderDetail via detailRows
           (state as any)._toggle = true;
         }
       }
@@ -111,29 +120,28 @@ export function startInteractive(
 function renderList(state: TuiState, withPerms: MergedResult[], emptyCount: number): void {
   const rows = process.stdout.rows || 24;
   const cols = process.stdout.columns || 80;
+  const w = Math.min(cols, 82);
+  const inner = w - 4; // box border + 1 space each side
+
   const cats = ['Bash', 'WebFetch', 'MCP', 'Tools'];
   const catsPresent = cats.filter((c) => withPerms.some((r) => r.groups.has(c)));
 
-  const nameWidth = Math.min(
-    Math.max(...withPerms.map((r) => r.shortName.length), 7),
-    40,
-  );
+  const catColWidth = catsPresent.length * 7;
+  const nameWidth = Math.min(Math.max(...withPerms.map((r) => r.shortName.length), 7), inner - catColWidth - 8);
 
-  // header takes 4 lines, footer takes 3 lines
-  const headerLines = 4;
-  const footerLines = 3 + (emptyCount > 0 ? 1 : 0);
-  const visibleRows = Math.max(1, rows - headerLines - footerLines);
+  // box takes: top(1) + header(2) + sep(1) + content + emptyLine?(1) + sep(1) + bottom(1) = 6-7 + content
+  const chrome = 6 + (emptyCount > 0 ? 1 : 0);
+  const visibleRows = Math.max(1, rows - chrome);
 
-  // adjust scroll offset
   if (state.cursor < state.scrollOffset) state.scrollOffset = state.cursor;
   if (state.cursor >= state.scrollOffset + visibleRows) state.scrollOffset = state.cursor - visibleRows + 1;
 
+  const scrollInfo = withPerms.length > visibleRows ? `${state.cursor + 1}/${withPerms.length}` : '';
   const lines: string[] = [];
 
-  const scrollInfo = withPerms.length > visibleRows ? `  ${DIM}${state.cursor + 1}/${withPerms.length}${NC}` : '';
-  lines.push(`  ${CYAN}${BOLD}ccperm${NC} ${DIM}interactive${NC}${scrollInfo}\n`);
-  lines.push(`  ${DIM}${pad('PROJECT', nameWidth)}  ${catsPresent.map((c) => rpad(c, 5)).join('  ')}  TOTAL${NC}`);
-  lines.push(`  ${DIM}${'─'.repeat(nameWidth + catsPresent.length * 7 + 8)}${NC}`);
+  lines.push(boxTop('ccperm', scrollInfo, w));
+  lines.push(boxLine(`${DIM}${pad('PROJECT', nameWidth)}  ${catsPresent.map((c) => rpad(c, 5)).join('  ')}  TOTAL${NC}`, w));
+  lines.push(boxSep(w));
 
   const end = Math.min(state.scrollOffset + visibleRows, withPerms.length);
   for (let i = state.scrollOffset; i < end; i++) {
@@ -141,7 +149,7 @@ function renderList(state: TuiState, withPerms: MergedResult[], emptyCount: numb
     const isCursor = i === state.cursor;
     const truncName = r.shortName.length > nameWidth ? r.shortName.slice(0, nameWidth - 1) + '…' : r.shortName;
 
-    const marker = isCursor ? `${CYAN}> ` : '  ';
+    const marker = isCursor ? `${CYAN}▸ ` : '  ';
     const nameStyle = isCursor ? `${BOLD}` : `${DIM}`;
     const nameCol = `${marker}${nameStyle}${pad(truncName, nameWidth)}${NC}`;
 
@@ -152,15 +160,14 @@ function renderList(state: TuiState, withPerms: MergedResult[], emptyCount: numb
     }).join('  ');
 
     const totalCol = isCursor ? `${BOLD}${rpad(r.totalCount, 5)}${NC}` : rpad(r.totalCount, 5);
-    lines.push(`${nameCol}  ${catCols}  ${totalCol}`);
+    lines.push(boxLine(`${nameCol}  ${catCols}  ${totalCol}`, w));
   }
 
   if (emptyCount > 0) {
-    lines.push(`\n  ${DIM}+ ${emptyCount} projects with no permissions${NC}`);
+    lines.push(boxLine(`${DIM}+ ${emptyCount} projects with no permissions${NC}`, w));
   }
 
-  lines.push('');
-  lines.push(`  ${DIM}[↑↓] navigate  [Enter] detail  [q] quit${NC}`);
+  lines.push(boxBottom('[↑↓] navigate  [Enter] detail  [q] quit', w));
 
   process.stdout.write(lines.join('\n') + '\n');
 }
@@ -168,6 +175,7 @@ function renderList(state: TuiState, withPerms: MergedResult[], emptyCount: numb
 function renderDetail(state: TuiState, withPerms: MergedResult[], results: ScanResult[]): void {
   const rows = process.stdout.rows || 24;
   const cols = process.stdout.columns || 80;
+  const w = Math.min(cols, 82);
   const project = withPerms[state.selectedProject];
   if (!project) return;
 
@@ -180,21 +188,21 @@ function renderDetail(state: TuiState, withPerms: MergedResult[], results: ScanR
   });
 
   // build navigable rows
-  const navRows: { line: string; key?: string }[] = [];
+  const navRows: { text: string; key?: string }[] = [];
   for (const result of projectResults) {
     if (result.totalCount === 0) continue;
     const fileName = result.display.replace(/.*\/\.claude\//, '');
-    navRows.push({ line: `  ${CYAN}${fileName}${NC}  ${DIM}(${result.totalCount})${NC}` });
+    navRows.push({ text: `${CYAN}${fileName}${NC}  ${DIM}(${result.totalCount})${NC}` });
     for (const group of result.groups) {
       const key = `${result.path}:${group.category}`;
       const isOpen = state.expanded.has(key);
       const arrow = isOpen ? '▾' : '▸';
-      navRows.push({ line: `    ${YELLOW}${arrow} ${group.category}${NC} ${DIM}(${group.items.length})${NC}`, key });
+      navRows.push({ text: `  ${YELLOW}${arrow} ${group.category}${NC} ${DIM}(${group.items.length})${NC}`, key });
       if (isOpen) {
-        const maxLen = cols - 10;
+        const maxLen = w - 12;
         for (const item of group.items) {
           const name = item.name.length > maxLen ? item.name.slice(0, maxLen - 1) + '…' : item.name;
-          navRows.push({ line: `      ${DIM}${name}${NC}` });
+          navRows.push({ text: `    ${DIM}${name}${NC}` });
         }
       }
     }
@@ -207,39 +215,33 @@ function renderDetail(state: TuiState, withPerms: MergedResult[], results: ScanR
     if (row?.key) {
       if (state.expanded.has(row.key)) state.expanded.delete(row.key);
       else state.expanded.add(row.key);
-      // re-render needed — will happen on next render() call
       renderDetail(state, withPerms, results);
       return;
     }
   }
 
-  // clamp cursor
   if (state.detailCursor >= navRows.length) state.detailCursor = Math.max(0, navRows.length - 1);
 
-  // scroll
-  const headerLines = 3;
-  const footerLines = 2;
-  const visibleRows = Math.max(1, rows - headerLines - footerLines);
+  // box chrome: top(1) + sep(1) + bottom(1) = 3
+  const visibleRows = Math.max(1, rows - 3);
   if (state.detailCursor < state.detailScroll) state.detailScroll = state.detailCursor;
   if (state.detailCursor >= state.detailScroll + visibleRows) state.detailScroll = state.detailCursor - visibleRows + 1;
 
   const visible = navRows.slice(state.detailScroll, state.detailScroll + visibleRows);
 
+  const scrollInfo = navRows.length > visibleRows ? `${state.detailCursor + 1}/${navRows.length}` : '';
   const lines: string[] = [];
-  lines.push(`  ${CYAN}${BOLD}${project.shortName}${NC}  ${DIM}(${project.totalCount} permissions)${NC}`);
-  lines.push('');
+  lines.push(boxTop(`${project.shortName}  (${project.totalCount})`, scrollInfo, w));
+
   for (let i = 0; i < visible.length; i++) {
     const globalIdx = state.detailScroll + i;
     const isCursor = globalIdx === state.detailCursor;
     const row = visible[i];
-    if (isCursor) {
-      lines.push(row.line.replace(/^  /, `${CYAN}> `));
-    } else {
-      lines.push(row.line);
-    }
+    const prefix = isCursor ? `${CYAN}▸ ` : '  ';
+    lines.push(boxLine(`${prefix}${row.text}`, w));
   }
-  lines.push('');
-  lines.push(`  ${DIM}[↑↓] navigate  [Enter] expand/collapse  [Esc] back  [q] quit${NC}`);
+
+  lines.push(boxBottom('[↑↓] navigate  [Enter] expand  [Esc] back  [q] quit', w));
 
   process.stdout.write(lines.join('\n') + '\n');
 }
