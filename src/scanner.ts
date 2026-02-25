@@ -64,7 +64,7 @@ export async function findSettingsFiles(
         let inner: string[];
         try { inner = await fs.promises.readdir(claudeDir); } catch { continue; }
         for (const f of inner) {
-          if (f.startsWith('settings') && f.endsWith('.json')) {
+          if (f === 'settings.json' || f === 'settings.local.json') {
             const full = path.join(claudeDir, f);
             try {
               await fs.promises.access(full, fs.constants.W_OK);
