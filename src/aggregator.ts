@@ -34,7 +34,7 @@ export function toFileEntries(results: ScanResult[]): FileEntry[] {
       groups.set(g.category, g.items.length);
     }
     const fileType = r.isGlobal ? 'global' as const : r.display.includes('settings.local.json') ? 'local' as const : 'shared' as const;
-    const name = r.isGlobal ? 'GLOBAL' : shortPath(r.display);
+    const name = r.isGlobal ? '~/.claude' : shortPath(r.display);
     return { display: r.display, shortName: name, totalCount: r.totalCount, groups, isGlobal: r.isGlobal, fileType };
   });
 }
