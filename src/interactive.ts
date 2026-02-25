@@ -153,7 +153,7 @@ function renderList(state: TuiState, withPerms: FileEntry[], emptyCount: number)
     const r = withPerms[i];
     const isCursor = i === state.cursor;
     const truncName = r.shortName.length > nameWidth ? r.shortName.slice(0, nameWidth - 1) + '…' : r.shortName;
-    const typeTag = r.isGlobal ? '' : r.fileType === 'local' ? ` ${DIM}local${NC}` : ` ${DIM}shared${NC}`;
+    const typeTag = r.isGlobal ? pad('', 7) : `${DIM} ${pad(r.fileType, 6)}${NC}`;
     const prefix = r.isGlobal ? '★ ' : '';
 
     const marker = isCursor ? `${CYAN}▸ ` : '  ';

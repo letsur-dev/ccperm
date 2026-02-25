@@ -33,7 +33,7 @@ export function printCompact(entries: FileEntry[], summary: AuditSummary): void 
   for (let i = 0; i < withPerms.length; i++) {
     const result = withPerms[i];
     const truncName = result.shortName.length > nameWidth ? result.shortName.slice(0, nameWidth - 1) + '…' : result.shortName;
-    const typeTag = result.isGlobal ? '' : result.fileType === 'local' ? ` ${DIM}local${NC}` : ` ${DIM}shared${NC}`;
+    const typeTag = result.isGlobal ? pad('', 7) : `${DIM} ${pad(result.fileType, 6)}${NC}`;
     const prefix = result.isGlobal ? '★ ' : '';
     const nameStyle = result.isGlobal ? `${YELLOW}` : '';
     const nameCol = `  ${nameStyle}${prefix}${pad(truncName, nameWidth)}${NC}${typeTag}`;
