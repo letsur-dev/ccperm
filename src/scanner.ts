@@ -51,14 +51,15 @@ export async function findSettingsFiles(
     try {
       entries = await fs.promises.readdir(dir, { withFileTypes: true });
     } catch {
-      return; // permission denied, etc.
+      return;
     }
+
+    const subdirs: Promise<void>[] = [];
 
     for (const entry of entries) {
       const name = entry.name;
 
       if (name === '.claude' && entry.isDirectory()) {
-        // found a .claude dir — check for settings files inside
         const claudeDir = path.join(dir, '.claude');
         let inner: string[];
         try { inner = await fs.promises.readdir(claudeDir); } catch { continue; }
@@ -73,15 +74,17 @@ export async function findSettingsFiles(
             } catch { /* not writable */ }
           }
         }
-        continue; // don't recurse into .claude
+        continue;
       }
 
       if (!entry.isDirectory()) continue;
       if (SKIP.has(name)) continue;
-      if (name.startsWith('.') && name !== '.claude') continue; // skip other hidden dirs
+      if (name.startsWith('.') && name !== '.claude') continue;
 
-      await walk(path.join(dir, name));
+      subdirs.push(walk(path.join(dir, name)));
     }
+
+    await Promise.all(subdirs);
   }
 
   await walk(searchDir);
