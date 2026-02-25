@@ -2,7 +2,17 @@ import readline from 'node:readline';
 import { RED, GREEN, YELLOW, CYAN, DIM, BOLD, NC } from './colors.js';
 import { FileEntry } from './aggregator.js';
 import { ScanResult } from './scanner.js';
-import { explain } from './explain.js';
+import { explain, Severity } from './explain.js';
+
+function severityTag(s: Severity): string {
+  const labels: Record<Severity, string> = {
+    critical: `${RED}CRITICAL${NC}`,
+    high: `${YELLOW}HIGH${NC}    `,
+    medium: `${DIM}MEDIUM${NC}  `,
+    low: `${DIM}LOW${NC}     `,
+  };
+  return labels[s];
+}
 
 // Clean up messy bash permission labels for display
 function cleanLabel(label: string): string {
@@ -223,10 +233,12 @@ function renderDetail(state: TuiState, withPerms: FileEntry[], results: ScanResu
         const clean = cleanLabel(item.name);
         if (state.showInfo) {
           const info = explain(group.category, item.name);
-          const nameMax = Math.min(35, w - 10);
+          const tag = severityTag(info.risk);
+          const tagLen = info.risk.length + 2; // tag visual width (e.g. "CRITICAL" + 2 spaces)
+          const nameMax = Math.min(30, w - tagLen - 14);
           const name = clean.length > nameMax ? clean.slice(0, nameMax - 1) + '…' : clean;
           const desc = info.description ? `${DIM}${info.description}${NC}` : '';
-          navRows.push({ text: `  ${pad(name, nameMax)}  ${desc}`, perm: item.name });
+          navRows.push({ text: `  ${pad(name, nameMax)} ${tag} ${desc}`, perm: item.name });
         } else {
           const maxLen = w - 8;
           const name = clean.length > maxLen ? clean.slice(0, maxLen - 1) + '…' : clean;
