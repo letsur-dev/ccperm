@@ -133,7 +133,7 @@ function renderList(state: TuiState, withPerms: FileEntry[], emptyCount: number)
   const catsPresent = cats.filter((c) => withPerms.some((r) => r.groups.has(c)));
 
   const catColWidth = catsPresent.length * 7;
-  const maxName = Math.max(...withPerms.map((r) => r.shortName.length), 7);
+  const maxName = Math.max(...withPerms.map((r) => r.isGlobal ? r.shortName.length + 2 : r.shortName.length), 7);
   const nameWidth = Math.min(maxName, inner - catColWidth - 16);
 
   const hasGlobalSep = withPerms.some((r) => r.isGlobal) && withPerms.some((r) => !r.isGlobal);
@@ -156,13 +156,13 @@ function renderList(state: TuiState, withPerms: FileEntry[], emptyCount: number)
   for (let i = state.scrollOffset; i < end; i++) {
     const r = withPerms[i];
     const isCursor = i === state.cursor;
-    const truncName = r.shortName.length > nameWidth ? r.shortName.slice(0, nameWidth - 1) + '…' : r.shortName;
+    const displayName = r.isGlobal ? `★ ${r.shortName}` : r.shortName;
+    const truncName = displayName.length > nameWidth ? displayName.slice(0, nameWidth - 1) + '…' : displayName;
     const typeTag = r.isGlobal ? pad('', 7) : `${DIM} ${pad(r.fileType, 6)}${NC}`;
-    const prefix = r.isGlobal ? '★ ' : '';
 
     const marker = isCursor ? `${CYAN}▸ ` : '  ';
     const nameStyle = isCursor ? `${BOLD}` : r.isGlobal ? `${YELLOW}` : '';
-    const nameCol = `${marker}${nameStyle}${prefix}${pad(truncName, nameWidth)}${NC}${typeTag}`;
+    const nameCol = `${marker}${nameStyle}${pad(truncName, nameWidth)}${NC}${typeTag}`;
 
     const catCols = catsPresent.map((c) => {
       const count = r.groups.get(c) || 0;
