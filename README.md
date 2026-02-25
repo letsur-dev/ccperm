@@ -4,83 +4,77 @@ Audit Claude Code permissions across all your projects.
 
 [한국어](README.ko.md)
 
-Claude Code stores allowed permissions (Bash commands, WebFetch domains, MCP tools, etc.) in `.claude/settings*.json` per project. As you work across many projects, these permissions pile up silently. **ccperm** lets you see exactly what you've allowed, everywhere.
+Claude Code stores allowed permissions (Bash commands, WebFetch domains, MCP tools, etc.) in `.claude/settings*.json` per project. As you work across many projects, these permissions pile up silently. **ccperm** scans your home directory, finds every settings file, and shows what you've allowed -- in an interactive TUI or static text output.
 
 ## Quick Start
 
 ```bash
-npx ccperm --all
+npx ccperm
 ```
 
 No install needed. Or install globally:
 
 ```bash
 npm i -g ccperm
-ccperm --all
+ccperm
 ```
 
-## Usage
-
-```bash
-npx ccperm              # Audit current project
-npx ccperm --all        # Audit all projects under ~
-npx ccperm --fix        # Auto-fix deprecated patterns
-npx ccperm --all --fix  # Audit + fix all projects
-```
-
-## Output example
-
-```
-━━━ Claude Code Permission Audit ━━━
-
-Scope: ~ (all projects)
-Scanned 12 files:
-
-  ~/Documents/project-a/.claude/settings.local.json  (Bash: 5, WebFetch: 3, Tools: 1)
-    Bash (5)
-      npm run build *
-      docker compose *
-      curl *
-      git add *
-      ssh *
-    WebFetch (3)
-      github.com
-      docs.anthropic.com
-      api.example.com
-    Tools (1)
-      WebSearch
-
-  ~/Documents/project-b/.claude/settings.local.json  (Bash: 2, MCP: 3)
-    Bash (2)
-      python3 *
-      pytest *
-    MCP (3)
-      browseros__browser_navigate
-      browseros__browser_click_element
-      browseros__browser_get_screenshot
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-All clean! No deprecated :* patterns found.
-```
+By default, ccperm scans all projects under `~` and launches an interactive TUI.
 
 ## Options
 
 | Flag | Description |
 |------|-------------|
-| `--all` | Scan all projects under home directory |
-| `--fix` | Auto-fix deprecated `:*` patterns to ` *` |
+| `--cwd` | Scan current directory only (default: all projects under `~`) |
+| `--static` | Force text output (default when piped / non-TTY) |
+| `--verbose` | Detailed static output with all permissions listed |
+| `--update` | Self-update via `npm install -g ccperm@latest` |
+| `--debug` | Show scan diagnostics (file paths, timing) |
 | `--help`, `-h` | Show help |
 | `--version`, `-v` | Show version |
-| `--update` | Check for updates |
 
-## Deprecated pattern fix
+## Interactive TUI
 
-Claude Code previously saved "Allow always" permissions with `:*` instead of ` *`, causing permission popups to repeat. `--fix` detects and corrects this automatically.
+When running in a TTY (the default), ccperm opens a box-frame TUI:
+
+**List view** -- Projects sorted by permission count. `GLOBAL` section at top shows `~/.claude/` settings. Each row shows category counts (Bash, WebFetch, MCP, Tools) and a `shared`/`local` label distinguishing `settings.json` vs `settings.local.json`. Max 25 visible rows; scroll for more.
 
 ```
-Before: Bash(npm run build:*)
-After:  Bash(npm run build *)
+┌ ccperm ──────────────────────────────── 1/8 ┐
+│ PROJECT          Bash  WebFetch   MCP  TOTAL │
+├──────────────────────────────────────────────┤
+│ ★ GLOBAL                           2      2 │
+├──────────────────────────────────────────────┤
+│▸ my-project  local  5       3     ·      8 │
+│  other-app   shared 2       ·     3      5 │
+│  ...                                        │
+└ [↑↓] navigate  [Enter] detail  [q] quit ────┘
 ```
+
+**Detail view** -- Press Enter to expand a project. Categories (Bash, WebFetch, MCP, Tools) are collapsible; press Enter to toggle.
+
+**Info mode** -- Press `[i]` to show risk indicators (`●` green/yellow/red) and descriptions for each permission.
+
+Keys: `↑↓` navigate, `Enter` select/expand, `[i]` toggle info, `Esc`/`Backspace` back, `q`/`Ctrl+C` quit.
+
+## Static Output
+
+Use `--static` (or pipe to another command) for text output:
+
+```bash
+ccperm --static           # compact table
+ccperm --static --verbose  # full permission listing
+```
+
+## Permission Levels
+
+ccperm distinguishes three levels of Claude Code settings:
+
+| Level | File | Scope |
+|-------|------|-------|
+| **global** | `~/.claude/settings.json` | Applies to all projects |
+| **shared** | `<project>/.claude/settings.json` | Per-project, committed to git |
+| **local** | `<project>/.claude/settings.local.json` | Per-project, gitignored |
 
 ## Requirements
 
