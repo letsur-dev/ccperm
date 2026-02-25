@@ -65,15 +65,21 @@ async function main() {
   console.log(`  Scope: ${YELLOW}${isCwd ? searchDir : '~ (all projects)'}${NC}`);
 
   const isTTY = process.stdout.isTTY;
-  const onProgress = isTTY ? (count: number) => {
-    process.stdout.write(`\r  ${CYAN}⠹${NC} Scanning... ${BOLD}${count}${NC} found`);
-  } : undefined;
+  const frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+  let frame = 0;
+  let fileCount = 0;
 
+  const spinner = isTTY ? setInterval(() => {
+    const countText = fileCount > 0 ? ` ${BOLD}${fileCount}${NC} found` : '';
+    process.stdout.write(`\r  ${CYAN}${frames[frame++ % frames.length]}${NC} Scanning...${countText}`);
+  }, 80) : null;
+
+  const onProgress = (count: number) => { fileCount = count; };
   const files = await findSettingsFiles(searchDir, onProgress);
 
-  if (isTTY) process.stdout.write('\r\x1b[K');
+  if (spinner) { clearInterval(spinner); process.stdout.write('\r\x1b[K'); }
   if (files.length === 0) { console.log(`  ${GREEN}✔ No settings files found.${NC}\n`); return; }
-  console.log(`  Found ${CYAN}${files.length}${NC} settings files\n`);
+  console.log(`  ${GREEN}✔${NC} Found ${CYAN}${files.length}${NC} settings files\n`);
 
   const results: ScanResult[] = files.map(scanFile).filter((r): r is ScanResult => r !== null);
   const merged = mergeByProject(results);
