@@ -1,6 +1,6 @@
 {
   "name": "ccperm",
-  "version": "1.9.7",
+  "version": "1.10.3",
   "description": "Audit Claude Code permissions across all your projects",
   "bin": {
     "ccperm": "bin/ccperm.js"
@@ -23,7 +23,8 @@
   },
   "files": [
     "bin/ccperm.js",
-    "dist"
+    "dist",
+    "screenshot.png"
   ],
   "devDependencies": {
     "@types/node": "^25.3.0",

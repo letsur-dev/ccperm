@@ -7,8 +7,9 @@ import { getVersion, notifyUpdate } from './updater.js';
 import { toFileEntries, summarize } from './aggregator.js';
 import { printCompact, printVerbose, printFooter } from './renderer.js';
 import { startInteractive } from './interactive.js';
+import { analyze } from './advisor.js';
 
-const KNOWN_FLAGS = new Set(['--cwd', '--verbose', '--static', '--update', '--fix', '--debug', '--help', '-h', '--version', '-v']);
+const KNOWN_FLAGS = new Set(['--cwd', '--verbose', '--static', '--update', '--fix', '--hey-claude-witness-me', '--debug', '--help', '-h', '--version', '-v']);
 
 const HELP = `${CYAN}ccperm${NC} — Audit Claude Code permissions across projects
 
@@ -21,8 +22,14 @@ ${YELLOW}Options:${NC}
   --verbose           Show all permissions per project (static)
   --static            Force static output (default in non-TTY)
   --update            Update ccperm to latest version
+  --hey-claude-witness-me
+                      Dump a markdown briefing so your AI can
+                      judge your permission hygiene. It will.
   --help, -h          Show this help
-  --version, -v       Show version`;
+  --version, -v       Show version
+
+${DIM}Pro tip: pipe --hey-claude-witness-me into Claude and watch it roast your settings.
+  $ ccperm --hey-claude-witness-me | pbcopy   # then paste into your AI of choice${NC}`;
 
 async function main() {
   const args = process.argv.slice(2);
@@ -85,6 +92,11 @@ async function main() {
   const results: ScanResult[] = files.map(scanFile).filter((r): r is ScanResult => r !== null);
   const entries = toFileEntries(results);
   const summary = summarize(results);
+
+  if (args.includes('--hey-claude-witness-me')) {
+    console.log(analyze(results));
+    return;
+  }
 
   if (!isStatic) {
     await startInteractive(entries, results);
