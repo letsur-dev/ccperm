@@ -20,7 +20,7 @@ function visLen(s: string): number {
 
 function boxLine(text: string, width: number): string {
   const vis = visLen(text);
-  const padRight = Math.max(0, width - vis - 1);
+  const padRight = Math.max(0, width - vis - 3);
   return `${DIM}│${NC} ${text}${' '.repeat(padRight)}${DIM}│${NC}`;
 }
 
