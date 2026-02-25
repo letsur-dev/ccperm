@@ -1,28 +1,28 @@
 import os from 'node:os';
+import { execFileSync } from 'node:child_process';
 import { RED, GREEN, YELLOW, CYAN, DIM, BOLD, NC } from './colors.js';
-import { findSettingsFiles, scanFile, ScanResult } from './scanner.js';
+import { findSettingsFiles, scanFile, ScanResult, countDeprecated } from './scanner.js';
 import { fixFiles } from './fixer.js';
 import { getVersion, notifyUpdate } from './updater.js';
 import { mergeByProject, summarize } from './aggregator.js';
-import { printCompact, printVerbose, printFooter, printFixResult } from './renderer.js';
+import { printCompact, printVerbose, printFooter } from './renderer.js';
 import { startInteractive } from './interactive.js';
+
+const KNOWN_FLAGS = new Set(['--cwd', '--verbose', '--static', '--update', '--fix', '--help', '-h', '--version', '-v']);
 
 const HELP = `${CYAN}ccperm${NC} — Audit Claude Code permissions across projects
 
 ${YELLOW}Usage:${NC}
-  ccperm              Audit current project
-  ccperm --all        Audit all projects under ~
+  ccperm              Audit all projects under ~
+  ccperm --cwd        Audit current directory only
 
 ${YELLOW}Options:${NC}
-  --all               Scan all projects under home directory
-  --verbose           Show all permissions per project
-  -i, --interactive   Browse permissions interactively
+  --cwd               Scan current directory only (default: all)
+  --verbose           Show all permissions per project (static)
+  --static            Force static output (default in non-TTY)
+  --update            Update ccperm to latest version
   --help, -h          Show this help
-  --version, -v       Show version
-
-${YELLOW}Legacy:${NC}
-  --fix          Auto-fix deprecated :* patterns (will be removed once
-                 Claude Code patches this upstream)`;
+  --version, -v       Show version`;
 
 async function main() {
   const args = process.argv.slice(2);
@@ -30,17 +30,43 @@ async function main() {
   if (args.includes('--help') || args.includes('-h')) { console.log(HELP); return; }
   if (args.includes('--version') || args.includes('-v')) { console.log(getVersion()); return; }
 
-  const isAll = args.includes('--all');
-  const isFix = args.includes('--fix');
+  if (args.includes('--update')) {
+    console.log(`  Updating ccperm...\n`);
+    try {
+      execFileSync('npm', ['install', '-g', 'ccperm@latest'], { stdio: 'inherit' });
+    } catch {
+      console.error(`\n  ${RED}Update failed. Try manually: npm install -g ccperm@latest${NC}\n`);
+      process.exit(1);
+    }
+    return;
+  }
+
+  const unknown = args.filter((a) => !KNOWN_FLAGS.has(a));
+  if (unknown.length > 0) {
+    console.error(`  ${RED}Unknown option: ${unknown.join(', ')}${NC}\n`);
+    console.log(HELP);
+    process.exit(1);
+  }
+
+  const isCwd = args.includes('--cwd');
   const isVerbose = args.includes('--verbose');
-  const isInteractive = args.includes('--interactive') || args.includes('-i');
+  const isStatic = args.includes('--static') || !process.stdout.isTTY;
 
   console.log(`\n  ${CYAN}${BOLD}ccperm${NC} ${DIM}v${getVersion()}${NC}  —  Claude Code Permission Audit\n`);
 
-  const searchDir = isAll ? os.homedir() : process.cwd();
-  console.log(`  Scope: ${YELLOW}${isAll ? '~ (all projects)' : searchDir}${NC}`);
+  const searchDir = isCwd ? process.cwd() : os.homedir();
+  console.log(`  Scope: ${YELLOW}${isCwd ? searchDir : '~ (all projects)'}${NC}`);
 
-  const files = findSettingsFiles(searchDir);
+  const frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+  let frame = 0;
+  const isTTY = process.stdout.isTTY;
+  const spinner = isTTY ? setInterval(() => {
+    process.stdout.write(`\r  ${CYAN}${frames[frame++ % frames.length]}${NC} Scanning...`);
+  }, 80) : null;
+
+  const files = await findSettingsFiles(searchDir);
+
+  if (spinner) { clearInterval(spinner); process.stdout.write('\r\x1b[K'); }
   if (files.length === 0) { console.log(`  ${GREEN}✔ No settings files found.${NC}\n`); return; }
   console.log(`  Found ${CYAN}${files.length}${NC} settings files\n`);
 
@@ -48,11 +74,7 @@ async function main() {
   const merged = mergeByProject(results);
   const summary = summarize(results);
 
-  if (isInteractive) {
-    if (!process.stdin.isTTY) {
-      console.error(`  ${RED}Error: --interactive requires a TTY terminal.${NC}\n`);
-      process.exit(1);
-    }
+  if (!isStatic) {
     await startInteractive(merged, results);
     return;
   }
@@ -60,15 +82,13 @@ async function main() {
   if (isVerbose) { printVerbose(results, summary); } else { printCompact(merged, summary); }
   printFooter(summary);
 
-  if (summary.deprecatedTotal === 0) { return; }
-  if (!isFix) {
-    const verboseHint = isVerbose ? '' : `\n  ${DIM}Use ${NC}--verbose${DIM} to see all permissions${NC}`;
-    console.log(`\n  Run with ${YELLOW}--fix${NC} to auto-fix.${verboseHint}\n`);
-    process.exit(1);
+  if (args.includes('--fix')) {
+    const affected = countDeprecated(results);
+    if (affected.length === 0) { console.log(`\n  ${GREEN}✔ Nothing to fix.${NC}\n`); return; }
+    const { totalPatterns, fixedFiles } = fixFiles(affected);
+    console.log(`\n  ${GREEN}✔ Fixed ${totalPatterns} patterns in ${fixedFiles} files.${NC}`);
+    console.log(`  ${DIM}Restart Claude Code for changes to take effect.${NC}\n`);
   }
-
-  console.log('');
-  printFixResult(fixFiles(summary.affectedFiles));
 }
 
 main();
