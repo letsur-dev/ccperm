@@ -34,7 +34,7 @@ export function printCompact(entries: FileEntry[], summary: AuditSummary): void 
     const result = withPerms[i];
     const truncName = result.shortName.length > nameWidth ? result.shortName.slice(0, nameWidth - 1) + '…' : result.shortName;
     const typeTag = result.isGlobal ? pad('', 7) : `${DIM} ${pad(result.fileType, 6)}${NC}`;
-    const nameStyle = result.isGlobal ? `${YELLOW}` : '';
+    const nameStyle = '';
     const nameCol = `  ${nameStyle}${pad(truncName, nameWidth)}${NC}${typeTag}`;
 
     const catCols = catsPresent.map((c) => {

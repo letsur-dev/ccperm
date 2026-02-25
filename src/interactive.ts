@@ -160,7 +160,7 @@ function renderList(state: TuiState, withPerms: FileEntry[], emptyCount: number)
     const typeTag = r.isGlobal ? pad('', 7) : `${DIM} ${pad(r.fileType, 6)}${NC}`;
 
     const marker = isCursor ? `${CYAN}▸ ` : '  ';
-    const nameStyle = isCursor ? `${BOLD}` : r.isGlobal ? `${YELLOW}` : '';
+    const nameStyle = isCursor ? `${BOLD}` : '';
     const nameCol = `${marker}${nameStyle}${pad(truncName, nameWidth)}${NC}${typeTag}`;
 
     const catCols = catsPresent.map((c) => {
