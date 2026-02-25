@@ -31,9 +31,16 @@ async function main() {
   if (args.includes('--version') || args.includes('-v')) { console.log(getVersion()); return; }
 
   if (args.includes('--update')) {
-    console.log(`  Updating ccperm...\n`);
+    const before = getVersion();
+    console.log(`  Updating ccperm from ${DIM}v${before}${NC}...\n`);
     try {
       execFileSync('npm', ['install', '-g', 'ccperm@latest'], { stdio: 'inherit' });
+      const after = execFileSync('ccperm', ['-v'], { encoding: 'utf8' }).trim();
+      if (after === before) {
+        console.log(`\n  ${GREEN}✔ Already up to date. ${BOLD}v${after}${NC}`);
+      } else {
+        console.log(`\n  ${GREEN}✔ Updated! ${DIM}v${before}${NC} → ${GREEN}${BOLD}v${after}${NC}`);
+      }
     } catch {
       console.error(`\n  ${RED}Update failed. Try manually: npm install -g ccperm@latest${NC}\n`);
       process.exit(1);
