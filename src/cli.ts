@@ -74,7 +74,7 @@ function printCompact(results: ScanResult[]) {
     merged.some((r) => r.groups.has(c))
   );
 
-  const withPerms = merged.filter((r) => r.totalCount > 0);
+  const withPerms = merged.filter((r) => r.totalCount > 0).sort((a, b) => b.totalCount - a.totalCount);
   const emptyCount = merged.filter((r) => r.totalCount === 0).length;
 
   // header
