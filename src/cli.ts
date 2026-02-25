@@ -57,16 +57,14 @@ async function main() {
   const searchDir = isCwd ? process.cwd() : os.homedir();
   console.log(`  Scope: ${YELLOW}${isCwd ? searchDir : '~ (all projects)'}${NC}`);
 
-  const frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
-  let frame = 0;
   const isTTY = process.stdout.isTTY;
-  const spinner = isTTY ? setInterval(() => {
-    process.stdout.write(`\r  ${CYAN}${frames[frame++ % frames.length]}${NC} Scanning...`);
-  }, 80) : null;
+  const onProgress = isTTY ? (count: number) => {
+    process.stdout.write(`\r  ${CYAN}⠹${NC} Scanning... ${BOLD}${count}${NC} found`);
+  } : undefined;
 
-  const files = await findSettingsFiles(searchDir);
+  const files = await findSettingsFiles(searchDir, onProgress);
 
-  if (spinner) { clearInterval(spinner); process.stdout.write('\r\x1b[K'); }
+  if (isTTY) process.stdout.write('\r\x1b[K');
   if (files.length === 0) { console.log(`  ${GREEN}✔ No settings files found.${NC}\n`); return; }
   console.log(`  Found ${CYAN}${files.length}${NC} settings files\n`);
 

@@ -29,24 +29,42 @@ export function countDeprecated(results: ScanResult[]): { path: string; count: n
   return out;
 }
 
-export function findSettingsFiles(searchDir: string): Promise<string[]> {
+function isWritable(f: string): boolean {
+  try { fs.accessSync(f, fs.constants.W_OK); return true; } catch { return false; }
+}
+
+export function findSettingsFiles(searchDir: string, onProgress?: (count: number) => void): Promise<string[]> {
   const prune = ['node_modules', '.git', '.cache', '.local', '.npm', '.nvm', '.bun',
     'snap', '.vscode', '.docker', '.cargo', '.rustup', 'go', '.gradle', '.m2',
     'Library', '.Trash', 'Pictures', 'Music', 'Videos', 'Downloads'];
   const pruneArgs = prune.flatMap((d) => ['-name', d, '-o']).slice(0, -1);
 
   return new Promise((resolve) => {
-    execFile('find', [
+    const results: string[] = [];
+    let buf = '';
+    const child = execFile('find', [
       searchDir,
       '(', ...pruneArgs, ')', '-prune',
       '-o', '-path', '*/.claude/settings*.json', '-type', 'f', '-print',
-    ], { encoding: 'utf8', timeout: 15000 }, (err, stdout) => {
-      const out = (stdout || (err as any)?.stdout || '').trim();
-      const lines = out ? out.split('\n').filter(Boolean) : [];
-      resolve(lines.filter((f: string) => {
-        try { fs.accessSync(f, fs.constants.W_OK); return true; } catch { return false; }
-      }));
+    ], { encoding: 'utf8', timeout: 15000 });
+
+    child.stdout?.on('data', (chunk: string) => {
+      buf += chunk;
+      const lines = buf.split('\n');
+      buf = lines.pop() || '';
+      for (const line of lines) {
+        if (line && isWritable(line)) results.push(line);
+      }
+      onProgress?.(results.length);
     });
+
+    child.on('close', () => {
+      if (buf && isWritable(buf)) results.push(buf);
+      onProgress?.(results.length);
+      resolve(results);
+    });
+
+    child.on('error', () => resolve(results));
   });
 }
 
