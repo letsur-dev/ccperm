@@ -4,6 +4,20 @@ import { FileEntry } from './aggregator.js';
 import { ScanResult } from './scanner.js';
 import { explain } from './explain.js';
 
+// Clean up messy bash permission labels for display
+function cleanLabel(label: string): string {
+  let s = label;
+  // Strip __NEW_LINE_hash__ prefix
+  s = s.replace(/^__NEW_LINE_[a-f0-9]+__\s*/, '');
+  // Truncate heredoc content: "python3 << 'EOF'\nimport..." → "python3 (heredoc)"
+  if (s.includes('<<')) s = s.replace(/\s*<<\s*['"]?\w+['"]?.*$/, ' (heredoc)');
+  // Truncate inline scripts with \n
+  if (s.includes('\\n')) s = s.replace(/\\n.*$/, '…');
+  // Strip :* and trailing * suffix
+  s = s.replace(/:\*$/, ' *');
+  return s;
+}
+
 interface TuiState {
   view: 'list' | 'detail';
   cursor: number;
@@ -206,17 +220,18 @@ function renderDetail(state: TuiState, withPerms: FileEntry[], results: ScanResu
     navRows.push({ text: `${YELLOW}${arrow} ${group.category}${NC} ${DIM}(${group.items.length})${NC}`, key });
     if (isOpen) {
       for (const item of group.items) {
+        const clean = cleanLabel(item.name);
         if (state.showInfo) {
           const info = explain(group.category, item.name);
           const riskColor = info.risk === 'red' ? RED : info.risk === 'yellow' ? YELLOW : GREEN;
           const dot = `${riskColor}●${NC}`;
-          const desc = info.description ? `  ${DIM}${info.description}${NC}` : '';
-          const maxLen = w - 8 - (info.description ? info.description.length + 2 : 0);
-          const name = item.name.length > maxLen ? item.name.slice(0, Math.max(8, maxLen) - 1) + '…' : item.name;
-          navRows.push({ text: `  ${dot} ${name}${desc}`, perm: item.name });
+          const nameMax = Math.min(35, w - 10);
+          const name = clean.length > nameMax ? clean.slice(0, nameMax - 1) + '…' : clean;
+          const desc = info.description ? `${DIM}${info.description}${NC}` : '';
+          navRows.push({ text: `  ${dot} ${pad(name, nameMax)}  ${desc}`, perm: item.name });
         } else {
           const maxLen = w - 8;
-          const name = item.name.length > maxLen ? item.name.slice(0, maxLen - 1) + '…' : item.name;
+          const name = clean.length > maxLen ? clean.slice(0, maxLen - 1) + '…' : clean;
           navRows.push({ text: `  ${DIM}${name}${NC}`, perm: item.name });
         }
       }
