@@ -23,8 +23,8 @@ export function printCompact(entries: FileEntry[], summary: AuditSummary): void 
   const emptyCount = entries.filter((r) => r.totalCount === 0 && !r.isGlobal).length;
 
   // header
-  const nameWidths = withPerms.map((r) => r.shortName.length + 2);
-  const nameWidth = Math.min(Math.max(...nameWidths, 7), 40);
+  const maxName = Math.max(...withPerms.map((r) => r.shortName.length), 7);
+  const nameWidth = Math.min(maxName, 40);
   const header = `  ${DIM}${pad('PROJECT', nameWidth)}  ${catsPresent.map((c) => rpad(c, 5)).join('  ')}  TOTAL${NC}`;
   console.log(header);
   console.log(`  ${DIM}${'─'.repeat(nameWidth + catsPresent.length * 7 + 8)}${NC}`);
@@ -32,11 +32,11 @@ export function printCompact(entries: FileEntry[], summary: AuditSummary): void 
   // rows
   for (let i = 0; i < withPerms.length; i++) {
     const result = withPerms[i];
-    const typeLabel = result.isGlobal ? '' : result.fileType === 'local' ? ' ˡ' : ' ˢ';
-    const displayName = result.isGlobal ? `★ ${result.shortName}` : `${result.shortName}${typeLabel}`;
-    const truncName = displayName.length > nameWidth ? displayName.slice(0, nameWidth - 1) + '…' : displayName;
-    const nameStyle = result.isGlobal ? `${YELLOW}` : `${DIM}`;
-    const nameCol = `  ${nameStyle}${pad(truncName, nameWidth)}${NC}`;
+    const truncName = result.shortName.length > nameWidth ? result.shortName.slice(0, nameWidth - 1) + '…' : result.shortName;
+    const typeTag = result.isGlobal ? '' : result.fileType === 'local' ? ` ${DIM}local${NC}` : ` ${DIM}shared${NC}`;
+    const prefix = result.isGlobal ? '★ ' : '';
+    const nameStyle = result.isGlobal ? `${YELLOW}` : '';
+    const nameCol = `  ${nameStyle}${prefix}${pad(truncName, nameWidth)}${NC}${typeTag}`;
 
     const catCols = catsPresent.map((c) => {
       const count = result.groups.get(c) || 0;

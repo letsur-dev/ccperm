@@ -129,8 +129,8 @@ function renderList(state: TuiState, withPerms: FileEntry[], emptyCount: number)
   const catsPresent = cats.filter((c) => withPerms.some((r) => r.groups.has(c)));
 
   const catColWidth = catsPresent.length * 7;
-  const nameWidths = withPerms.map((r) => r.shortName.length + 2);
-  const nameWidth = Math.min(Math.max(...nameWidths, 7), inner - catColWidth - 8);
+  const maxName = Math.max(...withPerms.map((r) => r.shortName.length), 7);
+  const nameWidth = Math.min(maxName, inner - catColWidth - 16);
 
   const hasGlobalSep = withPerms.some((r) => r.isGlobal) && withPerms.some((r) => !r.isGlobal);
   // box takes: top(1) + header(2) + sep(1) + content + globalSep?(1) + emptyLine?(1) + bottom(1)
@@ -152,13 +152,13 @@ function renderList(state: TuiState, withPerms: FileEntry[], emptyCount: number)
   for (let i = state.scrollOffset; i < end; i++) {
     const r = withPerms[i];
     const isCursor = i === state.cursor;
-    const typeLabel = r.isGlobal ? '' : r.fileType === 'local' ? ' ˡ' : ' ˢ';
-    const displayName = r.isGlobal ? `★ ${r.shortName}` : `${r.shortName}${typeLabel}`;
-    const truncName = displayName.length > nameWidth ? displayName.slice(0, nameWidth - 1) + '…' : displayName;
+    const truncName = r.shortName.length > nameWidth ? r.shortName.slice(0, nameWidth - 1) + '…' : r.shortName;
+    const typeTag = r.isGlobal ? '' : r.fileType === 'local' ? ` ${DIM}local${NC}` : ` ${DIM}shared${NC}`;
+    const prefix = r.isGlobal ? '★ ' : '';
 
     const marker = isCursor ? `${CYAN}▸ ` : '  ';
-    const nameStyle = isCursor ? `${BOLD}` : r.isGlobal ? `${YELLOW}` : `${DIM}`;
-    const nameCol = `${marker}${nameStyle}${pad(truncName, nameWidth)}${NC}`;
+    const nameStyle = isCursor ? `${BOLD}` : r.isGlobal ? `${YELLOW}` : '';
+    const nameCol = `${marker}${nameStyle}${prefix}${pad(truncName, nameWidth)}${NC}${typeTag}`;
 
     const catCols = catsPresent.map((c) => {
       const count = r.groups.get(c) || 0;
