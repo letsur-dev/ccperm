@@ -32,6 +32,7 @@ By default, ccperm scans all projects under `~` and launches an interactive TUI.
 | `--verbose` | Detailed static output with all permissions listed |
 | `--fix` | Auto-fix deprecated `:*` patterns to ` *` |
 | `--update` | Self-update via `npm install -g ccperm@latest` |
+| `--hey-claude-witness-me` | LLM-friendly markdown audit briefing with risk classification |
 | `--debug` | Show scan diagnostics (file paths, timing) |
 | `--help`, `-h` | Show help |
 | `--version`, `-v` | Show version |
@@ -80,6 +81,19 @@ ccperm distinguishes three levels of Claude Code settings:
 | **local** | `<project>/.claude/settings.local.json` | Per-project, gitignored |
 
 Permissions are additive — global + shared + local are merged at runtime.
+
+## Risk Classification
+
+Each permission is assigned a risk level inspired by [Destructive Command Guard (DCG)](https://github.com/Dicklesworthstone/destructive_command_guard). Used in `--hey-claude-witness-me` output and the TUI info mode.
+
+| Level | Meaning | Examples |
+|-------|---------|----------|
+| **CRITICAL** | Irreversible destruction or full system access | `rm -rf`, `sudo`, `terraform destroy`, `dd`, `curl \| sh` |
+| **HIGH** | Significant changes to system, remote, or infrastructure | `git push --force`, `chmod`, `aws`, `kubectl`, `ssh` |
+| **MEDIUM** | Controlled side effects, build/runtime tools | `docker`, `npm`, `node`, `curl`, `brew`, `sed` |
+| **LOW** | Read-only or safe dev tools | `cat`, `ls`, `grep`, `git` (non-push), `eslint`, `jest` |
+
+Context matters — `git` alone is low, but `git push --force` escalates to critical. Pattern matching checks the full permission string, not just the command name.
 
 ## Requirements
 

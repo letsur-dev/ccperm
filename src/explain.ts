@@ -153,19 +153,34 @@ const CRITICAL_PATTERNS: [RegExp, string, string][] = [
   [/git\s+reset\s+--hard/, 'Hard reset (destroys uncommitted changes)', 'core.git'],
   [/git\s+clean\s+-f/, 'Remove untracked files permanently', 'core.git'],
   [/git\s+stash\s+clear/, 'Delete all stashed changes', 'core.git'],
+  [/git\s+filter-branch/, 'Permanent history rewrite', 'core.git'],
   // containers
   [/docker\s+system\s+prune/, 'Prune all docker data', 'containers.docker'],
+  [/docker\s+volume\s+prune/, 'Delete all unused volumes', 'containers.docker'],
   // kubernetes
   [/kubectl\s+delete\s+namespace/, 'Delete entire namespace', 'kubernetes.kubectl'],
   [/kubectl\s+delete.*--all/, 'Delete all resources', 'kubernetes.kubectl'],
+  [/kubectl\s+delete\s+pvc/, 'Delete persistent volume claim', 'kubernetes.kubectl'],
   // cloud
   [/aws\s+s3\s+rb|aws\s+s3\s+rm.*--recursive/, 'Delete S3 data', 'cloud.aws'],
+  [/aws\s+ec2\s+terminate/, 'Terminate EC2 instances', 'cloud.aws'],
+  [/aws\s+rds\s+delete/, 'Delete RDS database', 'cloud.aws'],
+  [/aws\s+iam\s+delete/, 'Delete IAM resource', 'cloud.aws'],
   [/terraform\s+destroy/, 'Destroy infrastructure', 'infrastructure.terraform'],
+  [/terraform\s+apply\s+.*-auto-approve/, 'Auto-approve infrastructure changes', 'infrastructure.terraform'],
   // system
   [/chmod\s+777|chmod\s+-R/, 'Broad permission change', 'system.permissions'],
+  [/chmod\s+000/, 'Remove all file access', 'system.permissions'],
+  [/iptables\s+-F/, 'Flush firewall rules', 'system.network'],
+  [/\beval\b/, 'Arbitrary code execution', 'system'],
   // catch-all dangerous
   [/mkfs|shred|wipefs/, 'Disk destruction', 'core.filesystem'],
   [/curl.*\|\s*sh|curl.*\|\s*bash|wget.*\|\s*sh/, 'Pipe to shell (remote code execution)', 'networking'],
+  // database destructive
+  [/DROP\s+DATABASE/i, 'Drop database', 'database'],
+  [/DROP\s+TABLE/i, 'Drop table', 'database'],
+  [/DROP\s+SCHEMA.*CASCADE/i, 'Drop schema cascade', 'database'],
+  [/TRUNCATE/i, 'Truncate table data', 'database'],
 ];
 
 const HIGH_PATTERNS: [RegExp, string, string][] = [
@@ -173,16 +188,32 @@ const HIGH_PATTERNS: [RegExp, string, string][] = [
   [/git\s+push/, 'Push to remote', 'core.git'],
   [/git\s+rebase/, 'Rewrite commit history', 'core.git'],
   [/git\s+branch\s+-D/, 'Force delete branch', 'core.git'],
+  [/git\s+checkout\s+.*--/, 'Discard uncommitted changes', 'core.git'],
+  [/git\s+stash\s+drop/, 'Drop stashed changes', 'core.git'],
   // containers
   [/docker\s+rm/, 'Remove containers', 'containers.docker'],
   [/docker\s+run/, 'Run container', 'containers.docker'],
+  [/docker\s+image\s+prune.*--all/, 'Delete all images', 'containers.docker'],
+  // kubernetes
+  [/kubectl\s+drain/, 'Evict pods from node', 'kubernetes.kubectl'],
+  [/kubectl\s+scale.*--replicas=0/, 'Scale to zero (service down)', 'kubernetes.kubectl'],
+  [/helm\s+uninstall|helm\s+delete/, 'Uninstall Helm release', 'kubernetes.helm'],
   // cloud
   [/aws\s+ecs/, 'ECS management', 'cloud.aws'],
   [/aws\s+codepipeline/, 'CI/CD pipeline', 'cloud.aws'],
   [/aws\s+ssm/, 'Systems Manager', 'cloud.aws'],
+  [/aws\s+lambda\s+delete/, 'Delete Lambda function', 'cloud.aws'],
+  [/gcloud.*delete/, 'Delete GCP resource', 'cloud.gcp'],
+  // remote
+  [/rsync.*--delete/, 'Sync with deletion', 'remote.rsync'],
   // deploy
   [/npm\s+publish/, 'Publish to npm', 'packages'],
   [/vercel\s+--prod/, 'Deploy to production', 'deploy'],
+  // database
+  [/redis-cli.*FLUSHALL/i, 'Flush all Redis data', 'database.redis'],
+  [/redis-cli.*FLUSHDB/i, 'Flush Redis database', 'database.redis'],
+  // secrets
+  [/vault\s+delete/, 'Delete Vault secret', 'secrets.vault'],
 ];
 
 // Write path risk assessment

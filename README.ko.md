@@ -32,6 +32,7 @@ ccperm
 | `--verbose` | 모든 권한을 상세 나열하는 텍스트 출력 |
 | `--fix` | deprecated `:*` 패턴을 ` *`로 자동 수정 |
 | `--update` | `npm install -g ccperm@latest`로 자체 업데이트 |
+| `--hey-claude-witness-me` | LLM 친화적 마크다운 감사 브리핑 (위험도 분류 포함) |
 | `--debug` | 스캔 진단 정보 표시 (파일 경로, 소요 시간) |
 | `--help`, `-h` | 도움말 표시 |
 | `--version`, `-v` | 버전 표시 |
@@ -80,6 +81,19 @@ ccperm은 Claude Code 설정을 세 단계로 구분합니다:
 | **local** | `<project>/.claude/settings.local.json` | 프로젝트별, gitignore 대상 |
 
 권한은 합산 방식 — global + shared + local이 런타임에 병합됩니다.
+
+## 위험도 분류
+
+각 권한에 [Destructive Command Guard (DCG)](https://github.com/Dicklesworthstone/destructive_command_guard)에서 영감을 받은 위험도가 부여됩니다. `--hey-claude-witness-me` 출력과 TUI 정보 모드에서 사용됩니다.
+
+| 레벨 | 의미 | 예시 |
+|------|------|------|
+| **CRITICAL** | 되돌릴 수 없는 파괴 또는 전체 시스템 접근 | `rm -rf`, `sudo`, `terraform destroy`, `dd`, `curl \| sh` |
+| **HIGH** | 시스템/원격/인프라에 대한 중대한 변경 | `git push --force`, `chmod`, `aws`, `kubectl`, `ssh` |
+| **MEDIUM** | 제한된 부작용, 빌드/런타임 도구 | `docker`, `npm`, `node`, `curl`, `brew`, `sed` |
+| **LOW** | 읽기 전용 또는 안전한 개발 도구 | `cat`, `ls`, `grep`, `git` (push 제외), `eslint`, `jest` |
+
+컨텍스트가 중요합니다 — `git` 단독은 low지만, `git push --force`는 critical로 상승합니다. 명령어 이름뿐 아니라 전체 권한 문자열을 패턴 매칭합니다.
 
 ## 요구사항
 
