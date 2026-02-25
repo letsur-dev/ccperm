@@ -4,7 +4,6 @@ export interface MergedResult {
   display: string;
   shortName: string;
   totalCount: number;
-  deprecatedCount: number;
   groups: Map<string, number>;
 }
 
@@ -13,10 +12,7 @@ export interface AuditSummary {
   projectsWithPerms: number;
   projectsEmpty: number;
   totalPerms: number;
-  deprecatedTotal: number;
-  deprecatedFiles: number;
   categoryTotals: Map<string, number>;
-  affectedFiles: { path: string; count: number }[];
 }
 
 export function shortPath(display: string): string {
@@ -35,11 +31,10 @@ export function mergeByProject(results: ScanResult[]): MergedResult[] {
     const dir = projectDir(r.display);
     let merged = map.get(dir);
     if (!merged) {
-      merged = { display: r.display, shortName: shortPath(r.display), totalCount: 0, deprecatedCount: 0, groups: new Map() };
+      merged = { display: r.display, shortName: shortPath(r.display), totalCount: 0, groups: new Map() };
       map.set(dir, merged);
     }
     merged.totalCount += r.totalCount;
-    merged.deprecatedCount += r.deprecatedCount;
     for (const g of r.groups) {
       merged.groups.set(g.category, (merged.groups.get(g.category) || 0) + g.items.length);
     }
@@ -50,16 +45,8 @@ export function mergeByProject(results: ScanResult[]): MergedResult[] {
 export function summarize(results: ScanResult[]): AuditSummary {
   const merged = mergeByProject(results);
   const categoryTotals = new Map<string, number>();
-  let deprecatedTotal = 0;
-  let deprecatedFiles = 0;
-  const affectedFiles: { path: string; count: number }[] = [];
 
   for (const r of results) {
-    if (r.deprecatedCount > 0) {
-      deprecatedTotal += r.deprecatedCount;
-      deprecatedFiles++;
-      affectedFiles.push({ path: r.path, count: r.deprecatedCount });
-    }
     for (const group of r.groups) {
       categoryTotals.set(group.category, (categoryTotals.get(group.category) || 0) + group.items.length);
     }
@@ -74,9 +61,6 @@ export function summarize(results: ScanResult[]): AuditSummary {
     projectsWithPerms,
     projectsEmpty,
     totalPerms,
-    deprecatedTotal,
-    deprecatedFiles,
     categoryTotals,
-    affectedFiles,
   };
 }

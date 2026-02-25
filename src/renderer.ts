@@ -1,7 +1,6 @@
-import { RED, GREEN, YELLOW, CYAN, DIM, BOLD, NC } from './colors.js';
+import { YELLOW, CYAN, DIM, BOLD, NC } from './colors.js';
 import { ScanResult } from './scanner.js';
 import { MergedResult, AuditSummary } from './aggregator.js';
-import { FixResult } from './fixer.js';
 
 function pad(s: string, n: number): string {
   return s.length >= n ? s : s + ' '.repeat(n - s.length);
@@ -33,11 +32,7 @@ export function printCompact(merged: MergedResult[], summary: AuditSummary): voi
   // rows
   for (const result of withPerms) {
     const truncName = result.shortName.length > nameWidth ? result.shortName.slice(0, nameWidth - 1) + '…' : result.shortName;
-    const hasDeprecated = result.deprecatedCount > 0;
-    const marker = hasDeprecated ? `${RED}✖ ` : '  ';
-    const nameCol = hasDeprecated
-      ? `${marker}${pad(truncName, nameWidth)}${NC}`
-      : `  ${DIM}${pad(truncName, nameWidth)}${NC}`;
+    const nameCol = `  ${DIM}${pad(truncName, nameWidth)}${NC}`;
 
     const catCols = catsPresent.map((c) => {
       const count = result.groups.get(c) || 0;
@@ -64,11 +59,7 @@ export function printVerbose(results: ScanResult[], summary: AuditSummary): void
     for (const group of result.groups) {
       console.log(`    ${YELLOW}${group.category}${NC} ${DIM}(${group.items.length})${NC}`);
       for (const item of group.items) {
-        if (item.deprecated) {
-          console.log(`      ${RED}✖ ${item.name}${NC}  ${RED}← deprecated${NC}`);
-        } else {
-          console.log(`      ${DIM}${item.name}${NC}`);
-        }
+        console.log(`      ${DIM}${item.name}${NC}`);
       }
     }
     console.log('');
@@ -83,16 +74,5 @@ export function printFooter(summary: AuditSummary): void {
   console.log(`\n  ${DIM}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}`);
 
   const catSummary = [...summary.categoryTotals.entries()].map(([k, v]) => `${k}: ${BOLD}${v}${NC}${DIM}`).join('  ');
-  console.log(`  ${BOLD}${summary.projectsWithPerms}${NC} projects  ${BOLD}${summary.totalPerms}${NC} permissions  ${DIM}(${catSummary})${NC}`);
-
-  if (summary.deprecatedTotal === 0) {
-    console.log(`  ${GREEN}✔ All clean — no deprecated patterns${NC}\n`);
-  } else {
-    console.log(`  ${RED}✖ ${summary.deprecatedTotal} deprecated patterns in ${summary.deprecatedFiles} files${NC}`);
-  }
-}
-
-export function printFixResult(result: FixResult): void {
-  console.log(`  ${GREEN}✔ Fixed ${result.totalPatterns} patterns in ${result.fixedFiles} files.${NC}`);
-  console.log(`  ${DIM}Start a new session for changes to take effect.${NC}\n`);
+  console.log(`  ${BOLD}${summary.projectsWithPerms}${NC} projects  ${BOLD}${summary.totalPerms}${NC} permissions  ${DIM}(${catSummary})${NC}\n`);
 }

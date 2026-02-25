@@ -1,5 +1,5 @@
 import readline from 'node:readline';
-import { RED, GREEN, YELLOW, CYAN, DIM, BOLD, NC } from './colors.js';
+import { GREEN, YELLOW, CYAN, DIM, BOLD, NC } from './colors.js';
 import { MergedResult } from './aggregator.js';
 import { ScanResult } from './scanner.js';
 
@@ -165,11 +165,7 @@ function renderDetail(state: TuiState, withPerms: MergedResult[], results: ScanR
     for (const group of result.groups) {
       lines.push(`    ${YELLOW}${group.category}${NC} ${DIM}(${group.items.length})${NC}`);
       for (const item of group.items) {
-        if (item.deprecated) {
-          lines.push(`      ${RED}✖ ${item.name}${NC}  ${RED}← deprecated${NC}`);
-        } else {
-          lines.push(`      ${DIM}${item.name}${NC}`);
-        }
+        lines.push(`      ${DIM}${item.name}${NC}`);
       }
     }
     lines.push('');
