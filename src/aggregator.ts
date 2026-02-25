@@ -5,6 +5,7 @@ export interface MergedResult {
   shortName: string;
   totalCount: number;
   groups: Map<string, number>;
+  isGlobal: boolean;
 }
 
 export interface AuditSummary {
@@ -31,7 +32,8 @@ export function mergeByProject(results: ScanResult[]): MergedResult[] {
     const dir = projectDir(r.display);
     let merged = map.get(dir);
     if (!merged) {
-      merged = { display: r.display, shortName: shortPath(r.display), totalCount: 0, groups: new Map() };
+      const name = r.isGlobal ? 'GLOBAL' : shortPath(r.display);
+      merged = { display: r.display, shortName: name, totalCount: 0, groups: new Map(), isGlobal: r.isGlobal };
       map.set(dir, merged);
     }
     merged.totalCount += r.totalCount;

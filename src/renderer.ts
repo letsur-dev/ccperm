@@ -17,22 +17,25 @@ export function printCompact(merged: MergedResult[], summary: AuditSummary): voi
     merged.some((r) => r.groups.has(c))
   );
 
-  const withPerms = merged.filter((r) => r.totalCount > 0).sort((a, b) => b.totalCount - a.totalCount);
+  const globals = merged.filter((r) => r.totalCount > 0 && r.isGlobal).sort((a, b) => b.totalCount - a.totalCount);
+  const projects = merged.filter((r) => r.totalCount > 0 && !r.isGlobal).sort((a, b) => b.totalCount - a.totalCount);
+  const withPerms = [...globals, ...projects];
   const emptyCount = merged.filter((r) => r.totalCount === 0).length;
 
   // header
-  const nameWidth = Math.min(
-    Math.max(...withPerms.map((r) => r.shortName.length), 7),
-    40
-  );
+  const nameWidths = withPerms.map((r) => r.isGlobal ? r.shortName.length + 2 : r.shortName.length);
+  const nameWidth = Math.min(Math.max(...nameWidths, 7), 40);
   const header = `  ${DIM}${pad('PROJECT', nameWidth)}  ${catsPresent.map((c) => rpad(c, 5)).join('  ')}  TOTAL${NC}`;
   console.log(header);
   console.log(`  ${DIM}${'─'.repeat(nameWidth + catsPresent.length * 7 + 8)}${NC}`);
 
   // rows
-  for (const result of withPerms) {
-    const truncName = result.shortName.length > nameWidth ? result.shortName.slice(0, nameWidth - 1) + '…' : result.shortName;
-    const nameCol = `  ${DIM}${pad(truncName, nameWidth)}${NC}`;
+  for (let i = 0; i < withPerms.length; i++) {
+    const result = withPerms[i];
+    const displayName = result.isGlobal ? `★ ${result.shortName}` : result.shortName;
+    const truncName = displayName.length > nameWidth ? displayName.slice(0, nameWidth - 1) + '…' : displayName;
+    const nameStyle = result.isGlobal ? `${YELLOW}` : `${DIM}`;
+    const nameCol = `  ${nameStyle}${pad(truncName, nameWidth)}${NC}`;
 
     const catCols = catsPresent.map((c) => {
       const count = result.groups.get(c) || 0;
@@ -41,6 +44,11 @@ export function printCompact(merged: MergedResult[], summary: AuditSummary): voi
 
     const totalCol = rpad(result.totalCount, 5);
     console.log(`${nameCol}  ${catCols}  ${BOLD}${totalCol}${NC}`);
+
+    // separator after global section
+    if (result.isGlobal && i + 1 < withPerms.length && !withPerms[i + 1].isGlobal) {
+      console.log(`  ${DIM}${'─'.repeat(nameWidth + catsPresent.length * 7 + 8)}${NC}`);
+    }
   }
 
   if (emptyCount > 0) {

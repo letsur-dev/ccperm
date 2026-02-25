@@ -13,6 +13,7 @@ export interface ScanResult {
   permissions: string[];
   groups: PermGroup[];
   totalCount: number;
+  isGlobal: boolean;
 }
 
 const PERM_RE = /"(Bash|Write|Edit|Read|Glob|Grep|WebSearch|WebFetch|mcp_)[^"]*"/g;
@@ -100,6 +101,7 @@ export async function findSettingsFiles(
 export function scanFile(filePath: string): ScanResult | null {
   const home = os.homedir();
   const display = filePath.startsWith(home) ? '~' + filePath.slice(home.length) : filePath;
+  const isGlobal = path.dirname(path.dirname(filePath)) === home;
 
   let content: string;
   try { content = fs.readFileSync(filePath, 'utf8'); } catch { return null; }
@@ -109,7 +111,7 @@ export function scanFile(filePath: string): ScanResult | null {
   const groups = groupPermissions(perms);
   const totalCount = perms.length;
 
-  return { path: filePath, display, permissions: perms, groups, totalCount };
+  return { path: filePath, display, permissions: perms, groups, totalCount, isGlobal };
 }
 
 function categorize(perm: string): { category: string; label: string } {

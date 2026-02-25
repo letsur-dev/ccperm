@@ -48,7 +48,9 @@ export function startInteractive(
   results: ScanResult[],
 ): Promise<void> {
   return new Promise((resolve) => {
-    const withPerms = merged.filter((r) => r.totalCount > 0).sort((a, b) => b.totalCount - a.totalCount);
+    const globals = merged.filter((r) => r.totalCount > 0 && r.isGlobal).sort((a, b) => b.totalCount - a.totalCount);
+    const projects = merged.filter((r) => r.totalCount > 0 && !r.isGlobal).sort((a, b) => b.totalCount - a.totalCount);
+    const withPerms = [...globals, ...projects];
     const emptyCount = merged.filter((r) => r.totalCount === 0).length;
 
     if (withPerms.length === 0) {
@@ -127,11 +129,13 @@ function renderList(state: TuiState, withPerms: MergedResult[], emptyCount: numb
   const catsPresent = cats.filter((c) => withPerms.some((r) => r.groups.has(c)));
 
   const catColWidth = catsPresent.length * 7;
-  const nameWidth = Math.min(Math.max(...withPerms.map((r) => r.shortName.length), 7), inner - catColWidth - 8);
+  const nameWidths = withPerms.map((r) => r.isGlobal ? r.shortName.length + 2 : r.shortName.length);
+  const nameWidth = Math.min(Math.max(...nameWidths, 7), inner - catColWidth - 8);
 
-  // box takes: top(1) + header(2) + sep(1) + content + emptyLine?(1) + sep(1) + bottom(1) = 6-7 + content
-  const chrome = 6 + (emptyCount > 0 ? 1 : 0);
-  const visibleRows = Math.max(1, rows - chrome);
+  const hasGlobalSep = withPerms.some((r) => r.isGlobal) && withPerms.some((r) => !r.isGlobal);
+  // box takes: top(1) + header(2) + sep(1) + content + globalSep?(1) + emptyLine?(1) + bottom(1)
+  const chrome = 5 + (hasGlobalSep ? 1 : 0) + (emptyCount > 0 ? 1 : 0);
+  const visibleRows = Math.min(25, Math.max(1, rows - chrome));
 
   if (state.cursor < state.scrollOffset) state.scrollOffset = state.cursor;
   if (state.cursor >= state.scrollOffset + visibleRows) state.scrollOffset = state.cursor - visibleRows + 1;
@@ -143,14 +147,16 @@ function renderList(state: TuiState, withPerms: MergedResult[], emptyCount: numb
   lines.push(boxLine(`${DIM}${pad('PROJECT', nameWidth)}  ${catsPresent.map((c) => rpad(c, 5)).join('  ')}  TOTAL${NC}`, w));
   lines.push(boxSep(w));
 
+  const globalCount = withPerms.filter((r) => r.isGlobal).length;
   const end = Math.min(state.scrollOffset + visibleRows, withPerms.length);
   for (let i = state.scrollOffset; i < end; i++) {
     const r = withPerms[i];
     const isCursor = i === state.cursor;
-    const truncName = r.shortName.length > nameWidth ? r.shortName.slice(0, nameWidth - 1) + '…' : r.shortName;
+    const displayName = r.isGlobal ? `★ ${r.shortName}` : r.shortName;
+    const truncName = displayName.length > nameWidth ? displayName.slice(0, nameWidth - 1) + '…' : displayName;
 
     const marker = isCursor ? `${CYAN}▸ ` : '  ';
-    const nameStyle = isCursor ? `${BOLD}` : `${DIM}`;
+    const nameStyle = isCursor ? `${BOLD}` : r.isGlobal ? `${YELLOW}` : `${DIM}`;
     const nameCol = `${marker}${nameStyle}${pad(truncName, nameWidth)}${NC}`;
 
     const catCols = catsPresent.map((c) => {
@@ -161,6 +167,11 @@ function renderList(state: TuiState, withPerms: MergedResult[], emptyCount: numb
 
     const totalCol = isCursor ? `${BOLD}${rpad(r.totalCount, 5)}${NC}` : rpad(r.totalCount, 5);
     lines.push(boxLine(`${nameCol}  ${catCols}  ${totalCol}`, w));
+
+    // separator after global section
+    if (r.isGlobal && i + 1 < withPerms.length && !withPerms[i + 1].isGlobal) {
+      lines.push(boxSep(w));
+    }
   }
 
   if (emptyCount > 0) {
