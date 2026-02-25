@@ -1,122 +1,258 @@
 // Pattern-based permission explainer
-// Input is the "label" from categorize(), not the raw permission string
+// Risk levels inspired by Destructive Command Guard (DCG)
+// https://github.com/Dicklesworthstone/destructive_command_guard
 
-const BASH_COMMANDS: Record<string, [string, string]> = {
-  // [description, risk: green/yellow/red]
-  'git': ['Git version control', 'green'],
-  'npm': ['Package manager (can run scripts)', 'yellow'],
-  'npx': ['Run npm packages', 'yellow'],
-  'node': ['Run Node.js scripts', 'yellow'],
-  'bun': ['Bun runtime', 'yellow'],
-  'deno': ['Deno runtime', 'yellow'],
-  'python': ['Run Python scripts', 'yellow'],
-  'python3': ['Run Python scripts', 'yellow'],
-  'pip': ['Python package manager', 'yellow'],
-  'pip3': ['Python package manager', 'yellow'],
-  'docker': ['Container management', 'yellow'],
-  'docker-compose': ['Multi-container management', 'yellow'],
-  'curl': ['HTTP requests', 'yellow'],
-  'wget': ['Download files', 'yellow'],
-  'ssh': ['Remote shell access', 'red'],
-  'scp': ['Remote file copy', 'red'],
-  'rsync': ['File sync (local/remote)', 'yellow'],
-  'rm': ['Delete files', 'red'],
-  'chmod': ['Change permissions', 'yellow'],
-  'chown': ['Change ownership', 'red'],
-  'kill': ['Terminate processes', 'yellow'],
-  'sudo': ['Superuser access', 'red'],
-  'apt': ['System packages (Debian)', 'red'],
-  'apt-get': ['System packages (Debian)', 'red'],
-  'brew': ['Homebrew packages', 'yellow'],
-  'make': ['Build automation', 'yellow'],
-  'cargo': ['Rust build tool', 'yellow'],
-  'go': ['Go build tool', 'yellow'],
-  'mvn': ['Maven build', 'yellow'],
-  'gradle': ['Gradle build', 'yellow'],
-  'yarn': ['Package manager', 'yellow'],
-  'pnpm': ['Package manager', 'yellow'],
-  'tsc': ['TypeScript compiler', 'green'],
-  'eslint': ['Linter', 'green'],
-  'prettier': ['Formatter', 'green'],
-  'jest': ['Test runner', 'green'],
-  'vitest': ['Test runner', 'green'],
-  'cat': ['Read files', 'green'],
-  'ls': ['List directories', 'green'],
-  'find': ['Search files', 'green'],
-  'grep': ['Search text', 'green'],
-  'sed': ['Stream editor', 'yellow'],
-  'awk': ['Text processing', 'green'],
-  'wc': ['Count lines/words', 'green'],
-  'head': ['First lines of file', 'green'],
-  'tail': ['Last lines of file', 'green'],
-  'mkdir': ['Create directories', 'green'],
-  'cp': ['Copy files', 'green'],
-  'mv': ['Move/rename files', 'yellow'],
-  'echo': ['Print text', 'green'],
-  'env': ['Environment variables', 'green'],
-  'which': ['Locate command', 'green'],
-  'gh': ['GitHub CLI', 'yellow'],
-  'heroku': ['Heroku CLI', 'yellow'],
-  'vercel': ['Vercel CLI', 'yellow'],
-  'aws': ['AWS CLI', 'red'],
-  'gcloud': ['Google Cloud CLI', 'red'],
-  'az': ['Azure CLI', 'red'],
-  'kubectl': ['Kubernetes CLI', 'red'],
-  'terraform': ['Infrastructure as Code', 'red'],
-  'dd': ['Low-level disk copy', 'red'],
-  'jq': ['JSON processor', 'green'],
-  'bunx': ['Run bun packages', 'yellow'],
-  'claude': ['Claude Code CLI', 'green'],
-  'defaults': ['macOS defaults', 'yellow'],
-};
-
-const TOOL_DESCRIPTIONS: Record<string, [string, string]> = {
-  'Read': ['Read file contents', 'green'],
-  'Write': ['Create/overwrite files', 'yellow'],
-  'Edit': ['Modify existing files', 'yellow'],
-  'Glob': ['Search files by pattern', 'green'],
-  'Grep': ['Search file contents', 'green'],
-  'WebSearch': ['Web search', 'green'],
-};
+export type Severity = 'critical' | 'high' | 'medium' | 'low';
 
 export interface PermInfo {
   description: string;
-  risk: 'green' | 'yellow' | 'red';
+  risk: Severity;
+  domain?: string;  // DCG-style domain (e.g., "core.filesystem", "cloud.aws")
 }
 
-// Extract first command word from a bash label like "git branch:*" or "npm run build"
+// Base command → [description, default severity, domain]
+const BASH_COMMANDS: Record<string, [string, Severity, string]> = {
+  // core.filesystem
+  'rm': ['Delete files', 'high', 'core.filesystem'],
+  'shred': ['Secure delete', 'critical', 'core.filesystem'],
+  'dd': ['Low-level disk copy', 'critical', 'core.filesystem'],
+  'mkfs': ['Format filesystem', 'critical', 'core.filesystem'],
+  'chmod': ['Change permissions', 'high', 'system.permissions'],
+  'chown': ['Change ownership', 'high', 'system.permissions'],
+  'mv': ['Move/rename files', 'medium', 'core.filesystem'],
+  'cp': ['Copy files', 'low', 'core.filesystem'],
+  'mkdir': ['Create directories', 'low', 'core.filesystem'],
+
+  // core.git
+  'git': ['Git version control', 'low', 'core.git'],
+
+  // system
+  'sudo': ['Superuser access', 'critical', 'system.permissions'],
+  'su': ['Switch user', 'critical', 'system.permissions'],
+  'kill': ['Terminate processes', 'medium', 'system.services'],
+  'pkill': ['Kill by name', 'medium', 'system.services'],
+  'systemctl': ['Manage services', 'high', 'system.services'],
+  'service': ['Manage services', 'high', 'system.services'],
+  'journalctl': ['View logs', 'low', 'system.services'],
+
+  // system packages
+  'apt': ['System packages (Debian)', 'high', 'system.packages'],
+  'apt-get': ['System packages (Debian)', 'high', 'system.packages'],
+  'apt-cache': ['Package cache query', 'low', 'system.packages'],
+  'dpkg': ['Debian packages', 'high', 'system.packages'],
+  'brew': ['Homebrew packages', 'medium', 'system.packages'],
+  'snap': ['Snap packages', 'medium', 'system.packages'],
+
+  // remote
+  'ssh': ['Remote shell access', 'high', 'remote.ssh'],
+  'scp': ['Remote file copy', 'high', 'remote.scp'],
+  'rsync': ['File sync (local/remote)', 'medium', 'remote.rsync'],
+
+  // containers
+  'docker': ['Container management', 'medium', 'containers.docker'],
+  'docker-compose': ['Multi-container management', 'medium', 'containers.compose'],
+  'podman': ['Container management', 'medium', 'containers.podman'],
+
+  // kubernetes
+  'kubectl': ['Kubernetes CLI', 'high', 'kubernetes.kubectl'],
+  'helm': ['Kubernetes packages', 'high', 'kubernetes.helm'],
+
+  // cloud
+  'aws': ['AWS CLI', 'high', 'cloud.aws'],
+  'gcloud': ['Google Cloud CLI', 'high', 'cloud.gcp'],
+  'az': ['Azure CLI', 'high', 'cloud.azure'],
+  'terraform': ['Infrastructure as Code', 'critical', 'infrastructure.terraform'],
+  'pulumi': ['Infrastructure as Code', 'high', 'infrastructure.pulumi'],
+  'ansible': ['Configuration management', 'high', 'infrastructure.ansible'],
+
+  // networking
+  'curl': ['HTTP requests', 'medium', 'networking'],
+  'wget': ['Download files', 'medium', 'networking'],
+  'tailscale': ['Tailscale VPN', 'medium', 'networking'],
+  'cloudflared': ['Cloudflare tunnel', 'medium', 'networking'],
+
+  // databases
+  'psql': ['PostgreSQL client', 'high', 'database.postgresql'],
+  'mysql': ['MySQL client', 'high', 'database.mysql'],
+  'sqlite3': ['SQLite client', 'medium', 'database.sqlite'],
+  'redis-cli': ['Redis client', 'high', 'database.redis'],
+  'mongosh': ['MongoDB shell', 'high', 'database.mongodb'],
+
+  // runtimes
+  'node': ['Run Node.js scripts', 'medium', 'runtime'],
+  'python': ['Run Python scripts', 'medium', 'runtime'],
+  'python3': ['Run Python scripts', 'medium', 'runtime'],
+  'bun': ['Bun runtime', 'medium', 'runtime'],
+  'deno': ['Deno runtime', 'medium', 'runtime'],
+  'go': ['Go build tool', 'medium', 'runtime'],
+  'cargo': ['Rust build tool', 'medium', 'runtime'],
+  'rustc': ['Rust compiler', 'low', 'runtime'],
+
+  // package managers
+  'npm': ['Package manager (can run scripts)', 'medium', 'packages'],
+  'npx': ['Run npm packages', 'medium', 'packages'],
+  'bunx': ['Run bun packages', 'medium', 'packages'],
+  'yarn': ['Package manager', 'medium', 'packages'],
+  'pnpm': ['Package manager', 'medium', 'packages'],
+  'pip': ['Python package manager', 'medium', 'packages'],
+  'pip3': ['Python package manager', 'medium', 'packages'],
+  'uv': ['Python package manager', 'medium', 'packages'],
+
+  // build tools
+  'make': ['Build automation', 'medium', 'build'],
+  'tsc': ['TypeScript compiler', 'low', 'build'],
+  'mvn': ['Maven build', 'medium', 'build'],
+  'gradle': ['Gradle build', 'medium', 'build'],
+
+  // deploy
+  'vercel': ['Vercel CLI', 'medium', 'deploy'],
+  'heroku': ['Heroku CLI', 'medium', 'deploy'],
+  'rclone': ['Cloud storage sync', 'medium', 'storage'],
+
+  // safe tools
+  'cat': ['Read files', 'low', 'read'],
+  'ls': ['List directories', 'low', 'read'],
+  'find': ['Search files', 'low', 'read'],
+  'grep': ['Search text', 'low', 'read'],
+  'head': ['First lines of file', 'low', 'read'],
+  'tail': ['Last lines of file', 'low', 'read'],
+  'wc': ['Count lines/words', 'low', 'read'],
+  'sort': ['Sort lines', 'low', 'read'],
+  'tree': ['Directory tree', 'low', 'read'],
+  'echo': ['Print text', 'low', 'read'],
+  'env': ['Environment variables', 'low', 'read'],
+  'which': ['Locate command', 'low', 'read'],
+  'jq': ['JSON processor', 'low', 'read'],
+  'sed': ['Stream editor', 'medium', 'text'],
+  'awk': ['Text processing', 'low', 'text'],
+  'xargs': ['Build commands from stdin', 'medium', 'text'],
+  'source': ['Run shell script', 'medium', 'shell'],
+  'bash': ['Run shell', 'medium', 'shell'],
+  'sh': ['Run shell', 'medium', 'shell'],
+
+  // linters/formatters
+  'eslint': ['Linter', 'low', 'dev'],
+  'prettier': ['Formatter', 'low', 'dev'],
+  'jest': ['Test runner', 'low', 'dev'],
+  'vitest': ['Test runner', 'low', 'dev'],
+  'pytest': ['Python test runner', 'low', 'dev'],
+
+  // platform
+  'gh': ['GitHub CLI', 'medium', 'platform.github'],
+  'claude': ['Claude Code CLI', 'low', 'platform'],
+};
+
+// Context-aware patterns that UPGRADE severity
+// Regex matched against the FULL permission string (not just command name)
+const CRITICAL_PATTERNS: [RegExp, string, string][] = [
+  // core.filesystem
+  [/rm\s+.*-[a-z]*r[a-z]*f|rm\s+.*-[a-z]*f[a-z]*r|rm\s+-rf/, 'Recursive force delete', 'core.filesystem'],
+  [/rm\s+.*\/\*|rm\s+~/, 'Delete broad path', 'core.filesystem'],
+  // core.git
+  [/git\s+push\s+.*--force|git\s+push\s+.*-f\b/, 'Force push (destroys remote history)', 'core.git'],
+  [/git\s+reset\s+--hard/, 'Hard reset (destroys uncommitted changes)', 'core.git'],
+  [/git\s+clean\s+-f/, 'Remove untracked files permanently', 'core.git'],
+  [/git\s+stash\s+clear/, 'Delete all stashed changes', 'core.git'],
+  // containers
+  [/docker\s+system\s+prune/, 'Prune all docker data', 'containers.docker'],
+  // kubernetes
+  [/kubectl\s+delete\s+namespace/, 'Delete entire namespace', 'kubernetes.kubectl'],
+  [/kubectl\s+delete.*--all/, 'Delete all resources', 'kubernetes.kubectl'],
+  // cloud
+  [/aws\s+s3\s+rb|aws\s+s3\s+rm.*--recursive/, 'Delete S3 data', 'cloud.aws'],
+  [/terraform\s+destroy/, 'Destroy infrastructure', 'infrastructure.terraform'],
+  // system
+  [/chmod\s+777|chmod\s+-R/, 'Broad permission change', 'system.permissions'],
+  // catch-all dangerous
+  [/mkfs|shred|wipefs/, 'Disk destruction', 'core.filesystem'],
+  [/curl.*\|\s*sh|curl.*\|\s*bash|wget.*\|\s*sh/, 'Pipe to shell (remote code execution)', 'networking'],
+];
+
+const HIGH_PATTERNS: [RegExp, string, string][] = [
+  // core.git
+  [/git\s+push/, 'Push to remote', 'core.git'],
+  [/git\s+rebase/, 'Rewrite commit history', 'core.git'],
+  [/git\s+branch\s+-D/, 'Force delete branch', 'core.git'],
+  // containers
+  [/docker\s+rm/, 'Remove containers', 'containers.docker'],
+  [/docker\s+run/, 'Run container', 'containers.docker'],
+  // cloud
+  [/aws\s+ecs/, 'ECS management', 'cloud.aws'],
+  [/aws\s+codepipeline/, 'CI/CD pipeline', 'cloud.aws'],
+  [/aws\s+ssm/, 'Systems Manager', 'cloud.aws'],
+  // deploy
+  [/npm\s+publish/, 'Publish to npm', 'packages'],
+  [/vercel\s+--prod/, 'Deploy to production', 'deploy'],
+];
+
+// Write path risk assessment
+const WRITE_CRITICAL: RegExp[] = [
+  /\*\*\/\*\.key/, /\*\*\/\*\.pem/, /\.env/,
+  /credentials/, /secrets/, /\.ssh/,
+];
+
+const TOOL_DESCRIPTIONS: Record<string, [string, Severity]> = {
+  'Read': ['Read file contents', 'low'],
+  'Write': ['Create/overwrite files', 'medium'],
+  'Edit': ['Modify existing files', 'medium'],
+  'Glob': ['Search files by pattern', 'low'],
+  'Grep': ['Search file contents', 'low'],
+  'WebSearch': ['Web search', 'low'],
+};
+
+// Extract first command word from a bash label
 function extractCmd(label: string): string {
-  // Remove :* or * suffix patterns
-  const clean = label.replace(/[:]\*.*$/, '').replace(/\s\*.*$/, '');
-  // Get first word
+  const clean = label
+    .replace(/__NEW_LINE_[a-f0-9]+__\s*/, '')
+    .replace(/[:]\*.*$/, '')
+    .replace(/\s\*.*$/, '');
   return clean.split(/[\s(]/)[0];
 }
 
 export function explainBash(label: string): PermInfo {
+  // Check critical patterns first (full string match)
+  for (const [re, desc, domain] of CRITICAL_PATTERNS) {
+    if (re.test(label)) return { description: desc, risk: 'critical', domain };
+  }
+  // Check high patterns
+  for (const [re, desc, domain] of HIGH_PATTERNS) {
+    if (re.test(label)) return { description: desc, risk: 'high', domain };
+  }
+  // Fall back to command-level lookup
   const cmd = extractCmd(label);
   const entry = BASH_COMMANDS[cmd];
-  if (entry) return { description: entry[0], risk: entry[1] as PermInfo['risk'] };
-  return { description: '', risk: 'yellow' };
+  if (entry) return { description: entry[0], risk: entry[1], domain: entry[2] };
+  // Bare "Bash" with no command = full shell access
+  if (label.trim() === 'Bash' || label.trim() === '') return { description: 'Unrestricted shell access', risk: 'critical', domain: 'system' };
+  return { description: '', risk: 'medium' };
 }
 
 export function explainWebFetch(label: string): PermInfo {
-  return { description: label, risk: 'yellow' };
+  return { description: label, risk: 'low', domain: 'networking' };
 }
 
 export function explainMcp(label: string): PermInfo {
   const parts = label.replace(/^mcp__?/, '').split('__');
   const server = parts[0] || '';
   const tool = parts.slice(1).join(' ') || '';
-  return { description: tool ? `${server}: ${tool}` : server, risk: 'yellow' };
+  return { description: tool ? `${server}: ${tool}` : server, risk: 'medium', domain: 'mcp' };
 }
 
 export function explainTool(label: string): PermInfo {
+  // Check Write paths for sensitive targets
+  if (label.startsWith('Write:')) {
+    const path = label.slice(6);
+    for (const re of WRITE_CRITICAL) {
+      if (re.test(path)) return { description: `Write to sensitive path: ${path}`, risk: 'critical', domain: 'core.filesystem' };
+    }
+    return { description: `Write to ${path}`, risk: 'medium', domain: 'core.filesystem' };
+  }
   const toolName = label.match(/^(Read|Write|Edit|Glob|Grep|WebSearch)/)?.[1];
   if (toolName && TOOL_DESCRIPTIONS[toolName]) {
     const entry = TOOL_DESCRIPTIONS[toolName];
-    return { description: entry[0], risk: entry[1] as PermInfo['risk'] };
+    return { description: entry[0], risk: entry[1] };
   }
-  return { description: '', risk: 'yellow' };
+  return { description: '', risk: 'medium' };
 }
 
 export function explain(category: string, label: string): PermInfo {
@@ -124,5 +260,5 @@ export function explain(category: string, label: string): PermInfo {
   if (category === 'WebFetch') return explainWebFetch(label);
   if (category === 'MCP') return explainMcp(label);
   if (category === 'Tools') return explainTool(label);
-  return { description: '', risk: 'yellow' };
+  return { description: '', risk: 'medium' };
 }
