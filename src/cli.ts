@@ -4,7 +4,7 @@ import { RED, GREEN, YELLOW, CYAN, DIM, BOLD, NC } from './colors.js';
 import { findSettingsFiles, scanFile, ScanResult, countDeprecated } from './scanner.js';
 import { fixFiles } from './fixer.js';
 import { getVersion, notifyUpdate } from './updater.js';
-import { mergeByProject, summarize } from './aggregator.js';
+import { toFileEntries, summarize } from './aggregator.js';
 import { printCompact, printVerbose, printFooter } from './renderer.js';
 import { startInteractive } from './interactive.js';
 
@@ -83,15 +83,15 @@ async function main() {
   console.log(`  ${GREEN}✔${NC} Found ${CYAN}${files.length}${NC} settings files\n`);
 
   const results: ScanResult[] = files.map(scanFile).filter((r): r is ScanResult => r !== null);
-  const merged = mergeByProject(results);
+  const entries = toFileEntries(results);
   const summary = summarize(results);
 
   if (!isStatic) {
-    await startInteractive(merged, results);
+    await startInteractive(entries, results);
     return;
   }
 
-  if (isVerbose) { printVerbose(results, summary); } else { printCompact(merged, summary); }
+  if (isVerbose) { printVerbose(results, summary); } else { printCompact(entries, summary); }
   printFooter(summary);
 
   if (args.includes('--fix')) {

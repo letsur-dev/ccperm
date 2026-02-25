@@ -1,8 +1,9 @@
 import { ScanResult } from './scanner.js';
 
-export interface MergedResult {
+export interface FileEntry {
   display: string;
   shortName: string;
+  fileType: 'global' | 'shared' | 'local';
   totalCount: number;
   groups: Map<string, number>;
   isGlobal: boolean;
@@ -26,26 +27,20 @@ export function projectDir(display: string): string {
   return idx >= 0 ? display.slice(0, idx) : display;
 }
 
-export function mergeByProject(results: ScanResult[]): MergedResult[] {
-  const map = new Map<string, MergedResult>();
-  for (const r of results) {
-    const dir = projectDir(r.display);
-    let merged = map.get(dir);
-    if (!merged) {
-      const name = r.isGlobal ? 'GLOBAL' : shortPath(r.display);
-      merged = { display: r.display, shortName: name, totalCount: 0, groups: new Map(), isGlobal: r.isGlobal };
-      map.set(dir, merged);
-    }
-    merged.totalCount += r.totalCount;
+export function toFileEntries(results: ScanResult[]): FileEntry[] {
+  return results.map((r) => {
+    const groups = new Map<string, number>();
     for (const g of r.groups) {
-      merged.groups.set(g.category, (merged.groups.get(g.category) || 0) + g.items.length);
+      groups.set(g.category, g.items.length);
     }
-  }
-  return [...map.values()];
+    const fileType = r.isGlobal ? 'global' as const : r.display.includes('settings.local.json') ? 'local' as const : 'shared' as const;
+    const name = r.isGlobal ? 'GLOBAL' : shortPath(r.display);
+    return { display: r.display, shortName: name, totalCount: r.totalCount, groups, isGlobal: r.isGlobal, fileType };
+  });
 }
 
 export function summarize(results: ScanResult[]): AuditSummary {
-  const merged = mergeByProject(results);
+  const dirs = new Set(results.map((r) => projectDir(r.display)));
   const categoryTotals = new Map<string, number>();
 
   for (const r of results) {
@@ -59,7 +54,7 @@ export function summarize(results: ScanResult[]): AuditSummary {
   const totalPerms = [...categoryTotals.values()].reduce((a, b) => a + b, 0);
 
   return {
-    totalProjects: merged.length,
+    totalProjects: dirs.size,
     projectsWithPerms,
     projectsEmpty,
     totalPerms,

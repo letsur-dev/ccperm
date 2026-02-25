@@ -1,6 +1,6 @@
 import readline from 'node:readline';
 import { GREEN, YELLOW, CYAN, DIM, BOLD, NC } from './colors.js';
-import { MergedResult } from './aggregator.js';
+import { FileEntry } from './aggregator.js';
 import { ScanResult } from './scanner.js';
 
 interface TuiState {
@@ -44,7 +44,7 @@ function boxSep(width: number): string {
 }
 
 export function startInteractive(
-  merged: MergedResult[],
+  merged: FileEntry[],
   results: ScanResult[],
 ): Promise<void> {
   return new Promise((resolve) => {
@@ -119,7 +119,7 @@ export function startInteractive(
   });
 }
 
-function renderList(state: TuiState, withPerms: MergedResult[], emptyCount: number): void {
+function renderList(state: TuiState, withPerms: FileEntry[], emptyCount: number): void {
   const rows = process.stdout.rows || 24;
   const cols = process.stdout.columns || 80;
   const w = Math.min(cols, 82);
@@ -129,7 +129,7 @@ function renderList(state: TuiState, withPerms: MergedResult[], emptyCount: numb
   const catsPresent = cats.filter((c) => withPerms.some((r) => r.groups.has(c)));
 
   const catColWidth = catsPresent.length * 7;
-  const nameWidths = withPerms.map((r) => r.isGlobal ? r.shortName.length + 2 : r.shortName.length);
+  const nameWidths = withPerms.map((r) => r.shortName.length + 2);
   const nameWidth = Math.min(Math.max(...nameWidths, 7), inner - catColWidth - 8);
 
   const hasGlobalSep = withPerms.some((r) => r.isGlobal) && withPerms.some((r) => !r.isGlobal);
@@ -152,7 +152,8 @@ function renderList(state: TuiState, withPerms: MergedResult[], emptyCount: numb
   for (let i = state.scrollOffset; i < end; i++) {
     const r = withPerms[i];
     const isCursor = i === state.cursor;
-    const displayName = r.isGlobal ? `★ ${r.shortName}` : r.shortName;
+    const typeLabel = r.isGlobal ? '' : r.fileType === 'local' ? ' ˡ' : ' ˢ';
+    const displayName = r.isGlobal ? `★ ${r.shortName}` : `${r.shortName}${typeLabel}`;
     const truncName = displayName.length > nameWidth ? displayName.slice(0, nameWidth - 1) + '…' : displayName;
 
     const marker = isCursor ? `${CYAN}▸ ` : '  ';
@@ -183,38 +184,28 @@ function renderList(state: TuiState, withPerms: MergedResult[], emptyCount: numb
   process.stdout.write(lines.join('\n') + '\n');
 }
 
-function renderDetail(state: TuiState, withPerms: MergedResult[], results: ScanResult[]): void {
+function renderDetail(state: TuiState, withPerms: FileEntry[], results: ScanResult[]): void {
   const rows = process.stdout.rows || 24;
   const cols = process.stdout.columns || 80;
   const w = Math.min(cols, 82);
   const project = withPerms[state.selectedProject];
   if (!project) return;
 
-  const projectResults = results.filter((r) => {
-    const idx = r.display.indexOf('/.claude/');
-    const dir = idx >= 0 ? r.display.slice(0, idx) : r.display;
-    const projIdx = project.display.indexOf('/.claude/');
-    const projDir = projIdx >= 0 ? project.display.slice(0, projIdx) : project.display;
-    return dir === projDir;
-  });
+  const fileResult = results.find((r) => r.display === project.display);
+  if (!fileResult || fileResult.totalCount === 0) return;
 
   // build navigable rows
   const navRows: { text: string; key?: string }[] = [];
-  for (const result of projectResults) {
-    if (result.totalCount === 0) continue;
-    const fileName = result.display.replace(/.*\/\.claude\//, '');
-    navRows.push({ text: `${CYAN}${fileName}${NC}  ${DIM}(${result.totalCount})${NC}` });
-    for (const group of result.groups) {
-      const key = `${result.path}:${group.category}`;
-      const isOpen = state.expanded.has(key);
-      const arrow = isOpen ? '▾' : '▸';
-      navRows.push({ text: `  ${YELLOW}${arrow} ${group.category}${NC} ${DIM}(${group.items.length})${NC}`, key });
-      if (isOpen) {
-        const maxLen = w - 12;
-        for (const item of group.items) {
-          const name = item.name.length > maxLen ? item.name.slice(0, maxLen - 1) + '…' : item.name;
-          navRows.push({ text: `    ${DIM}${name}${NC}` });
-        }
+  for (const group of fileResult.groups) {
+    const key = `${fileResult.path}:${group.category}`;
+    const isOpen = state.expanded.has(key);
+    const arrow = isOpen ? '▾' : '▸';
+    navRows.push({ text: `${YELLOW}${arrow} ${group.category}${NC} ${DIM}(${group.items.length})${NC}`, key });
+    if (isOpen) {
+      const maxLen = w - 12;
+      for (const item of group.items) {
+        const name = item.name.length > maxLen ? item.name.slice(0, maxLen - 1) + '…' : item.name;
+        navRows.push({ text: `  ${DIM}${name}${NC}` });
       }
     }
   }
@@ -242,7 +233,8 @@ function renderDetail(state: TuiState, withPerms: MergedResult[], results: ScanR
 
   const scrollInfo = navRows.length > visibleRows ? `${state.detailCursor + 1}/${navRows.length}` : '';
   const lines: string[] = [];
-  lines.push(boxTop(`${project.shortName}  (${project.totalCount})`, scrollInfo, w));
+  const typeTag = project.fileType === 'global' ? 'global' : project.fileType;
+  lines.push(boxTop(`${project.shortName} (${typeTag})  ${project.totalCount} permissions`, scrollInfo, w));
 
   for (let i = 0; i < visible.length; i++) {
     const globalIdx = state.detailScroll + i;

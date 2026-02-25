@@ -1,6 +1,6 @@
 import { YELLOW, CYAN, DIM, BOLD, NC } from './colors.js';
 import { ScanResult } from './scanner.js';
-import { MergedResult, AuditSummary } from './aggregator.js';
+import { FileEntry, AuditSummary } from './aggregator.js';
 
 function pad(s: string, n: number): string {
   return s.length >= n ? s : s + ' '.repeat(n - s.length);
@@ -11,19 +11,19 @@ function rpad(s: string | number, n: number): string {
   return str.length >= n ? str : ' '.repeat(n - str.length) + str;
 }
 
-export function printCompact(merged: MergedResult[], summary: AuditSummary): void {
+export function printCompact(entries: FileEntry[], summary: AuditSummary): void {
   const cats = ['Bash', 'WebFetch', 'MCP', 'Tools'];
   const catsPresent = cats.filter((c) =>
-    merged.some((r) => r.groups.has(c))
+    entries.some((r) => r.groups.has(c))
   );
 
-  const globals = merged.filter((r) => r.totalCount > 0 && r.isGlobal).sort((a, b) => b.totalCount - a.totalCount);
-  const projects = merged.filter((r) => r.totalCount > 0 && !r.isGlobal).sort((a, b) => b.totalCount - a.totalCount);
+  const globals = entries.filter((r) => r.totalCount > 0 && r.isGlobal).sort((a, b) => b.totalCount - a.totalCount);
+  const projects = entries.filter((r) => r.totalCount > 0 && !r.isGlobal).sort((a, b) => b.totalCount - a.totalCount);
   const withPerms = [...globals, ...projects];
-  const emptyCount = merged.filter((r) => r.totalCount === 0).length;
+  const emptyCount = entries.filter((r) => r.totalCount === 0).length;
 
   // header
-  const nameWidths = withPerms.map((r) => r.isGlobal ? r.shortName.length + 2 : r.shortName.length);
+  const nameWidths = withPerms.map((r) => r.shortName.length + 2);
   const nameWidth = Math.min(Math.max(...nameWidths, 7), 40);
   const header = `  ${DIM}${pad('PROJECT', nameWidth)}  ${catsPresent.map((c) => rpad(c, 5)).join('  ')}  TOTAL${NC}`;
   console.log(header);
@@ -32,7 +32,8 @@ export function printCompact(merged: MergedResult[], summary: AuditSummary): voi
   // rows
   for (let i = 0; i < withPerms.length; i++) {
     const result = withPerms[i];
-    const displayName = result.isGlobal ? `★ ${result.shortName}` : result.shortName;
+    const typeLabel = result.isGlobal ? '' : result.fileType === 'local' ? ' ˡ' : ' ˢ';
+    const displayName = result.isGlobal ? `★ ${result.shortName}` : `${result.shortName}${typeLabel}`;
     const truncName = displayName.length > nameWidth ? displayName.slice(0, nameWidth - 1) + '…' : displayName;
     const nameStyle = result.isGlobal ? `${YELLOW}` : `${DIM}`;
     const nameCol = `  ${nameStyle}${pad(truncName, nameWidth)}${NC}`;
@@ -82,5 +83,5 @@ export function printFooter(summary: AuditSummary): void {
   console.log(`\n  ${DIM}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}`);
 
   const catSummary = [...summary.categoryTotals.entries()].map(([k, v]) => `${k}: ${BOLD}${v}${NC}${DIM}`).join('  ');
-  console.log(`  ${BOLD}${summary.projectsWithPerms}${NC} projects  ${BOLD}${summary.totalPerms}${NC} permissions  ${DIM}(${catSummary})${NC}\n`);
+  console.log(`  ${BOLD}${summary.totalProjects}${NC} projects  ${BOLD}${summary.totalPerms}${NC} permissions  ${DIM}(${catSummary})${NC}\n`);
 }
