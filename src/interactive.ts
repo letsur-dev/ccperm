@@ -8,6 +8,7 @@ interface TuiState {
   cursor: number;
   scrollOffset: number;
   selectedProject: number;
+  detailScroll: number;
 }
 
 export function startInteractive(
@@ -24,7 +25,7 @@ export function startInteractive(
       return;
     }
 
-    const state: TuiState = { view: 'list', cursor: 0, scrollOffset: 0, selectedProject: 0 };
+    const state: TuiState = { view: 'list', cursor: 0, scrollOffset: 0, selectedProject: 0, detailScroll: 0 };
 
     readline.emitKeypressEvents(process.stdin);
     if (process.stdin.isTTY) process.stdin.setRawMode(true);
@@ -69,12 +70,18 @@ export function startInteractive(
           state.cursor = Math.min(withPerms.length - 1, state.cursor + 1);
         } else if (key.name === 'return') {
           state.selectedProject = state.cursor;
+          state.detailScroll = 0;
           state.view = 'detail';
         }
       } else {
         // detail view
         if (key.name === 'escape' || key.name === 'backspace') {
           state.view = 'list';
+          state.detailScroll = 0;
+        } else if (key.name === 'up') {
+          state.detailScroll = Math.max(0, state.detailScroll - 1);
+        } else if (key.name === 'down') {
+          state.detailScroll++;
         }
       }
 
@@ -143,10 +150,10 @@ function renderList(state: TuiState, withPerms: MergedResult[], emptyCount: numb
 }
 
 function renderDetail(state: TuiState, withPerms: MergedResult[], results: ScanResult[]): void {
+  const rows = process.stdout.rows || 24;
   const project = withPerms[state.selectedProject];
   if (!project) return;
 
-  // find ScanResults belonging to this project
   const projectResults = results.filter((r) => {
     const idx = r.display.indexOf('/.claude/');
     const dir = idx >= 0 ? r.display.slice(0, idx) : r.display;
@@ -155,23 +162,38 @@ function renderDetail(state: TuiState, withPerms: MergedResult[], results: ScanR
     return dir === projDir;
   });
 
-  const lines: string[] = [];
-
-  lines.push(`  ${CYAN}${BOLD}${project.shortName}${NC}  ${DIM}(${project.totalCount} permissions)${NC}\n`);
-
+  // build content lines
+  const content: string[] = [];
   for (const result of projectResults) {
     if (result.totalCount === 0) continue;
-    lines.push(`  ${DIM}${result.display}${NC}`);
+    // short filename: settings.local.json
+    const fileName = result.display.replace(/.*\/\.claude\//, '');
+    content.push(`  ${CYAN}${fileName}${NC}  ${DIM}(${result.totalCount})${NC}`);
     for (const group of result.groups) {
-      lines.push(`    ${YELLOW}${group.category}${NC} ${DIM}(${group.items.length})${NC}`);
+      content.push(`    ${YELLOW}${group.category}${NC} ${DIM}(${group.items.length})${NC}`);
       for (const item of group.items) {
-        lines.push(`      ${DIM}${item.name}${NC}`);
+        content.push(`      ${DIM}${item.name}${NC}`);
       }
     }
-    lines.push('');
+    content.push(`  ${DIM}${'─'.repeat(40)}${NC}`);
   }
 
-  lines.push(`  ${DIM}[Esc/Backspace] back  [q] quit${NC}`);
+  // header + footer take space
+  const headerLines = 3;
+  const footerLines = 2;
+  const visibleRows = Math.max(1, rows - headerLines - footerLines);
+  const maxScroll = Math.max(0, content.length - visibleRows);
+  if (state.detailScroll > maxScroll) state.detailScroll = maxScroll;
+
+  const visible = content.slice(state.detailScroll, state.detailScroll + visibleRows);
+  const scrollPct = content.length <= visibleRows ? '' : `  ${DIM}${state.detailScroll + visibleRows}/${content.length}${NC}`;
+
+  const lines: string[] = [];
+  lines.push(`  ${CYAN}${BOLD}${project.shortName}${NC}  ${DIM}(${project.totalCount} permissions)${NC}${scrollPct}`);
+  lines.push('');
+  lines.push(...visible);
+  lines.push('');
+  lines.push(`  ${DIM}[↑↓] scroll  [Esc] back  [q] quit${NC}`);
 
   process.stdout.write(lines.join('\n') + '\n');
 }
