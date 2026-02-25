@@ -130,7 +130,8 @@ function renderList(state: TuiState, withPerms: MergedResult[], emptyCount: numb
 
   const lines: string[] = [];
 
-  lines.push(`  ${CYAN}${BOLD}ccperm${NC} ${DIM}interactive${NC}\n`);
+  const scrollInfo = withPerms.length > visibleRows ? `  ${DIM}${state.cursor + 1}/${withPerms.length}${NC}` : '';
+  lines.push(`  ${CYAN}${BOLD}ccperm${NC} ${DIM}interactive${NC}${scrollInfo}\n`);
   lines.push(`  ${DIM}${pad('PROJECT', nameWidth)}  ${catsPresent.map((c) => rpad(c, 5)).join('  ')}  TOTAL${NC}`);
   lines.push(`  ${DIM}${'─'.repeat(nameWidth + catsPresent.length * 7 + 8)}${NC}`);
 
