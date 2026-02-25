@@ -48,10 +48,10 @@ export function startInteractive(
   results: ScanResult[],
 ): Promise<void> {
   return new Promise((resolve) => {
-    const globals = merged.filter((r) => r.totalCount > 0 && r.isGlobal).sort((a, b) => b.totalCount - a.totalCount);
+    const globals = merged.filter((r) => r.isGlobal);
     const projects = merged.filter((r) => r.totalCount > 0 && !r.isGlobal).sort((a, b) => b.totalCount - a.totalCount);
     const withPerms = [...globals, ...projects];
-    const emptyCount = merged.filter((r) => r.totalCount === 0).length;
+    const emptyCount = merged.filter((r) => r.totalCount === 0 && !r.isGlobal).length;
 
     if (withPerms.length === 0) {
       console.log(`\n  ${GREEN}No projects with permissions found.${NC}\n`);

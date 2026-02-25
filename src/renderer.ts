@@ -17,10 +17,10 @@ export function printCompact(entries: FileEntry[], summary: AuditSummary): void 
     entries.some((r) => r.groups.has(c))
   );
 
-  const globals = entries.filter((r) => r.totalCount > 0 && r.isGlobal).sort((a, b) => b.totalCount - a.totalCount);
+  const globals = entries.filter((r) => r.isGlobal);
   const projects = entries.filter((r) => r.totalCount > 0 && !r.isGlobal).sort((a, b) => b.totalCount - a.totalCount);
   const withPerms = [...globals, ...projects];
-  const emptyCount = entries.filter((r) => r.totalCount === 0).length;
+  const emptyCount = entries.filter((r) => r.totalCount === 0 && !r.isGlobal).length;
 
   // header
   const nameWidths = withPerms.map((r) => r.shortName.length + 2);
