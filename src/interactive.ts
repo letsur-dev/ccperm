@@ -223,12 +223,10 @@ function renderDetail(state: TuiState, withPerms: FileEntry[], results: ScanResu
         const clean = cleanLabel(item.name);
         if (state.showInfo) {
           const info = explain(group.category, item.name);
-          const riskColor = info.risk === 'red' ? RED : info.risk === 'yellow' ? YELLOW : GREEN;
-          const dot = `${riskColor}●${NC}`;
           const nameMax = Math.min(35, w - 10);
           const name = clean.length > nameMax ? clean.slice(0, nameMax - 1) + '…' : clean;
           const desc = info.description ? `${DIM}${info.description}${NC}` : '';
-          navRows.push({ text: `  ${dot} ${pad(name, nameMax)}  ${desc}`, perm: item.name });
+          navRows.push({ text: `  ${pad(name, nameMax)}  ${desc}`, perm: item.name });
         } else {
           const maxLen = w - 8;
           const name = clean.length > maxLen ? clean.slice(0, maxLen - 1) + '…' : clean;
