@@ -1,7 +1,8 @@
 import readline from 'node:readline';
-import { GREEN, YELLOW, CYAN, DIM, BOLD, NC } from './colors.js';
+import { RED, GREEN, YELLOW, CYAN, DIM, BOLD, NC } from './colors.js';
 import { FileEntry } from './aggregator.js';
 import { ScanResult } from './scanner.js';
+import { explainPermission } from './explain.js';
 
 interface TuiState {
   view: 'list' | 'detail';
@@ -11,6 +12,7 @@ interface TuiState {
   detailCursor: number;
   detailScroll: number;
   expanded: Set<string>;
+  showInfo: boolean;
 }
 
 // strip ANSI escape codes for visible length
@@ -59,7 +61,7 @@ export function startInteractive(
       return;
     }
 
-    const state: TuiState = { view: 'list', cursor: 0, scrollOffset: 0, selectedProject: 0, detailCursor: 0, detailScroll: 0, expanded: new Set() };
+    const state: TuiState = { view: 'list', cursor: 0, scrollOffset: 0, selectedProject: 0, detailCursor: 0, detailScroll: 0, expanded: new Set(), showInfo: false };
 
     readline.emitKeypressEvents(process.stdin);
     if (process.stdin.isTTY) process.stdin.setRawMode(true);
@@ -108,6 +110,8 @@ export function startInteractive(
           state.detailCursor++;
         } else if (key.name === 'return') {
           (state as any)._toggle = true;
+        } else if (key.name === 'i') {
+          state.showInfo = !state.showInfo;
         }
       }
 
@@ -195,17 +199,27 @@ function renderDetail(state: TuiState, withPerms: FileEntry[], results: ScanResu
   if (!fileResult || fileResult.totalCount === 0) return;
 
   // build navigable rows
-  const navRows: { text: string; key?: string }[] = [];
+  const navRows: { text: string; key?: string; perm?: string }[] = [];
   for (const group of fileResult.groups) {
     const key = `${fileResult.path}:${group.category}`;
     const isOpen = state.expanded.has(key);
     const arrow = isOpen ? '▾' : '▸';
     navRows.push({ text: `${YELLOW}${arrow} ${group.category}${NC} ${DIM}(${group.items.length})${NC}`, key });
     if (isOpen) {
-      const maxLen = w - 12;
       for (const item of group.items) {
-        const name = item.name.length > maxLen ? item.name.slice(0, maxLen - 1) + '…' : item.name;
-        navRows.push({ text: `  ${DIM}${name}${NC}` });
+        if (state.showInfo) {
+          const info = explainPermission(item.name);
+          const riskColor = info.risk === 'red' ? RED : info.risk === 'yellow' ? YELLOW : GREEN;
+          const dot = `${riskColor}●${NC}`;
+          const maxLen = w - 16;
+          const name = item.name.length > maxLen ? item.name.slice(0, maxLen - 1) + '…' : item.name;
+          navRows.push({ text: `  ${dot} ${DIM}${name}${NC}`, perm: item.name });
+          navRows.push({ text: `      ${DIM}${info.description}${NC}` });
+        } else {
+          const maxLen = w - 12;
+          const name = item.name.length > maxLen ? item.name.slice(0, maxLen - 1) + '…' : item.name;
+          navRows.push({ text: `  ${DIM}${name}${NC}`, perm: item.name });
+        }
       }
     }
   }
@@ -244,7 +258,8 @@ function renderDetail(state: TuiState, withPerms: FileEntry[], results: ScanResu
     lines.push(boxLine(`${prefix}${row.text}`, w));
   }
 
-  lines.push(boxBottom('[↑↓] navigate  [Enter] expand  [Esc] back  [q] quit', w));
+  const infoHint = state.showInfo ? '[i] hide info' : '[i] info';
+  lines.push(boxBottom(`[↑↓] navigate  [Enter] expand  ${infoHint}  [Esc] back  [q] quit`, w));
 
   process.stdout.write(lines.join('\n') + '\n');
 }
