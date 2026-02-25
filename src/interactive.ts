@@ -85,7 +85,7 @@ export function startInteractive(
     const onKey = (_str: string | undefined, key: readline.Key) => {
       if (!key) return;
 
-      if (key.name === 'q') { cleanup(); console.log(''); resolve(); return; }
+      if (key.name === 'q' || (key.name === 'c' && key.ctrl)) { cleanup(); console.log(''); resolve(); return; }
 
       if (state.view === 'list') {
         if (key.name === 'up') state.cursor = Math.max(0, state.cursor - 1);
