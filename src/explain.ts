@@ -1,122 +1,128 @@
 // Pattern-based permission explainer
+// Input is the "label" from categorize(), not the raw permission string
 
 const BASH_COMMANDS: Record<string, [string, string]> = {
   // [description, risk: green/yellow/red]
-  'git': ['Git version control commands', 'green'],
-  'npm': ['Node.js package manager — can run scripts', 'yellow'],
-  'npx': ['Run npm packages — can execute arbitrary code', 'yellow'],
+  'git': ['Git version control', 'green'],
+  'npm': ['Package manager (can run scripts)', 'yellow'],
+  'npx': ['Run npm packages', 'yellow'],
   'node': ['Run Node.js scripts', 'yellow'],
-  'bun': ['Bun runtime — run scripts, install packages', 'yellow'],
-  'deno': ['Deno runtime — run scripts', 'yellow'],
+  'bun': ['Bun runtime', 'yellow'],
+  'deno': ['Deno runtime', 'yellow'],
   'python': ['Run Python scripts', 'yellow'],
   'python3': ['Run Python scripts', 'yellow'],
-  'pip': ['Python package manager — can run setup scripts', 'yellow'],
-  'pip3': ['Python package manager — can run setup scripts', 'yellow'],
-  'docker': ['Docker container management', 'yellow'],
-  'docker-compose': ['Docker Compose multi-container management', 'yellow'],
-  'curl': ['HTTP requests from command line', 'yellow'],
-  'wget': ['Download files from the web', 'yellow'],
+  'pip': ['Python package manager', 'yellow'],
+  'pip3': ['Python package manager', 'yellow'],
+  'docker': ['Container management', 'yellow'],
+  'docker-compose': ['Multi-container management', 'yellow'],
+  'curl': ['HTTP requests', 'yellow'],
+  'wget': ['Download files', 'yellow'],
   'ssh': ['Remote shell access', 'red'],
-  'scp': ['Remote file copy over SSH', 'red'],
-  'rsync': ['File synchronization (local or remote)', 'yellow'],
-  'rm': ['Delete files and directories', 'red'],
-  'chmod': ['Change file permissions', 'yellow'],
-  'chown': ['Change file ownership', 'red'],
+  'scp': ['Remote file copy', 'red'],
+  'rsync': ['File sync (local/remote)', 'yellow'],
+  'rm': ['Delete files', 'red'],
+  'chmod': ['Change permissions', 'yellow'],
+  'chown': ['Change ownership', 'red'],
   'kill': ['Terminate processes', 'yellow'],
-  'sudo': ['Run commands as superuser', 'red'],
-  'apt': ['System package manager (Debian/Ubuntu)', 'red'],
-  'apt-get': ['System package manager (Debian/Ubuntu)', 'red'],
-  'brew': ['Homebrew package manager (macOS)', 'yellow'],
-  'make': ['Build automation — runs Makefile targets', 'yellow'],
-  'cargo': ['Rust package manager and build tool', 'yellow'],
-  'go': ['Go build and package tool', 'yellow'],
-  'mvn': ['Maven Java build tool', 'yellow'],
-  'gradle': ['Gradle build tool', 'yellow'],
-  'yarn': ['Yarn package manager — can run scripts', 'yellow'],
-  'pnpm': ['pnpm package manager — can run scripts', 'yellow'],
+  'sudo': ['Superuser access', 'red'],
+  'apt': ['System packages (Debian)', 'red'],
+  'apt-get': ['System packages (Debian)', 'red'],
+  'brew': ['Homebrew packages', 'yellow'],
+  'make': ['Build automation', 'yellow'],
+  'cargo': ['Rust build tool', 'yellow'],
+  'go': ['Go build tool', 'yellow'],
+  'mvn': ['Maven build', 'yellow'],
+  'gradle': ['Gradle build', 'yellow'],
+  'yarn': ['Package manager', 'yellow'],
+  'pnpm': ['Package manager', 'yellow'],
   'tsc': ['TypeScript compiler', 'green'],
-  'eslint': ['JavaScript/TypeScript linter', 'green'],
-  'prettier': ['Code formatter', 'green'],
-  'jest': ['JavaScript test runner', 'green'],
-  'vitest': ['Vite-based test runner', 'green'],
-  'cat': ['Read file contents', 'green'],
-  'ls': ['List directory contents', 'green'],
-  'find': ['Search for files', 'green'],
-  'grep': ['Search text patterns in files', 'green'],
-  'sed': ['Stream editor — modify file contents', 'yellow'],
-  'awk': ['Text processing language', 'green'],
-  'wc': ['Count lines/words/bytes', 'green'],
-  'head': ['Show first lines of file', 'green'],
-  'tail': ['Show last lines of file', 'green'],
+  'eslint': ['Linter', 'green'],
+  'prettier': ['Formatter', 'green'],
+  'jest': ['Test runner', 'green'],
+  'vitest': ['Test runner', 'green'],
+  'cat': ['Read files', 'green'],
+  'ls': ['List directories', 'green'],
+  'find': ['Search files', 'green'],
+  'grep': ['Search text', 'green'],
+  'sed': ['Stream editor', 'yellow'],
+  'awk': ['Text processing', 'green'],
+  'wc': ['Count lines/words', 'green'],
+  'head': ['First lines of file', 'green'],
+  'tail': ['Last lines of file', 'green'],
   'mkdir': ['Create directories', 'green'],
   'cp': ['Copy files', 'green'],
   'mv': ['Move/rename files', 'yellow'],
   'echo': ['Print text', 'green'],
-  'env': ['Show/set environment variables', 'green'],
-  'which': ['Locate a command', 'green'],
-  'gh': ['GitHub CLI — repos, PRs, issues', 'yellow'],
-  'heroku': ['Heroku platform CLI', 'yellow'],
-  'vercel': ['Vercel deployment CLI', 'yellow'],
-  'aws': ['AWS CLI — cloud infrastructure', 'red'],
+  'env': ['Environment variables', 'green'],
+  'which': ['Locate command', 'green'],
+  'gh': ['GitHub CLI', 'yellow'],
+  'heroku': ['Heroku CLI', 'yellow'],
+  'vercel': ['Vercel CLI', 'yellow'],
+  'aws': ['AWS CLI', 'red'],
   'gcloud': ['Google Cloud CLI', 'red'],
   'az': ['Azure CLI', 'red'],
-  'kubectl': ['Kubernetes cluster management', 'red'],
+  'kubectl': ['Kubernetes CLI', 'red'],
   'terraform': ['Infrastructure as Code', 'red'],
+  'dd': ['Low-level disk copy', 'red'],
+  'jq': ['JSON processor', 'green'],
+  'bunx': ['Run bun packages', 'yellow'],
+  'claude': ['Claude Code CLI', 'green'],
+  'defaults': ['macOS defaults', 'yellow'],
 };
 
-const TOOL_DESCRIPTIONS: Record<string, string> = {
-  'Read': 'Read file contents from disk',
-  'Write': 'Create or overwrite files',
-  'Edit': 'Modify existing files (partial edits)',
-  'Glob': 'Search for files by name pattern',
-  'Grep': 'Search file contents with regex',
-  'WebSearch': 'Search the web via search engine',
+const TOOL_DESCRIPTIONS: Record<string, [string, string]> = {
+  'Read': ['Read file contents', 'green'],
+  'Write': ['Create/overwrite files', 'yellow'],
+  'Edit': ['Modify existing files', 'yellow'],
+  'Glob': ['Search files by pattern', 'green'],
+  'Grep': ['Search file contents', 'green'],
+  'WebSearch': ['Web search', 'green'],
 };
 
 export interface PermInfo {
   description: string;
   risk: 'green' | 'yellow' | 'red';
-  detail?: string;
 }
 
-export function explainPermission(perm: string): PermInfo {
-  // Bash permissions
-  const bashMatch = perm.match(/^Bash\((.+?)[\s)]/);
-  if (bashMatch || perm === 'Bash') {
-    const cmd = bashMatch ? bashMatch[1] : '';
-    const entry = BASH_COMMANDS[cmd];
-    if (entry) {
-      return { description: entry[0], risk: entry[1] as PermInfo['risk'], detail: `Command: ${cmd}` };
-    }
-    if (cmd) {
-      return { description: `Run "${cmd}" command`, risk: 'yellow', detail: `Command: ${cmd}` };
-    }
-    return { description: 'Run shell commands', risk: 'red' };
-  }
+// Extract first command word from a bash label like "git branch:*" or "npm run build"
+function extractCmd(label: string): string {
+  // Remove :* or * suffix patterns
+  const clean = label.replace(/[:]\*.*$/, '').replace(/\s\*.*$/, '');
+  // Get first word
+  return clean.split(/[\s(]/)[0];
+}
 
-  // WebFetch
-  const fetchMatch = perm.match(/^WebFetch\(domain:(.+)\)$/);
-  if (fetchMatch) {
-    const domain = fetchMatch[1];
-    return { description: `HTTP requests to ${domain}`, risk: 'yellow', detail: `Domain: ${domain}` };
-  }
-  if (perm.startsWith('WebFetch')) {
-    return { description: 'HTTP requests to external URLs', risk: 'yellow' };
-  }
+export function explainBash(label: string): PermInfo {
+  const cmd = extractCmd(label);
+  const entry = BASH_COMMANDS[cmd];
+  if (entry) return { description: entry[0], risk: entry[1] as PermInfo['risk'] };
+  return { description: '', risk: 'yellow' };
+}
 
-  // MCP tools
-  if (perm.startsWith('mcp__') || perm.startsWith('mcp_')) {
-    const parts = perm.split('__');
-    const server = parts[1] || 'unknown';
-    const tool = parts.slice(2).join('__') || 'unknown';
-    return { description: `MCP: ${server} → ${tool}`, risk: 'yellow', detail: `Server: ${server}, Tool: ${tool}` };
-  }
+export function explainWebFetch(label: string): PermInfo {
+  return { description: label, risk: 'yellow' };
+}
 
-  // Standard tools
-  const toolName = perm.match(/^(Read|Write|Edit|Glob|Grep|WebSearch)/)?.[1];
+export function explainMcp(label: string): PermInfo {
+  const parts = label.replace(/^mcp__?/, '').split('__');
+  const server = parts[0] || '';
+  const tool = parts.slice(1).join(' ') || '';
+  return { description: tool ? `${server}: ${tool}` : server, risk: 'yellow' };
+}
+
+export function explainTool(label: string): PermInfo {
+  const toolName = label.match(/^(Read|Write|Edit|Glob|Grep|WebSearch)/)?.[1];
   if (toolName && TOOL_DESCRIPTIONS[toolName]) {
-    return { description: TOOL_DESCRIPTIONS[toolName], risk: 'green' };
+    const entry = TOOL_DESCRIPTIONS[toolName];
+    return { description: entry[0], risk: entry[1] as PermInfo['risk'] };
   }
+  return { description: '', risk: 'yellow' };
+}
 
-  return { description: perm, risk: 'yellow' };
+export function explain(category: string, label: string): PermInfo {
+  if (category === 'Bash') return explainBash(label);
+  if (category === 'WebFetch') return explainWebFetch(label);
+  if (category === 'MCP') return explainMcp(label);
+  if (category === 'Tools') return explainTool(label);
+  return { description: '', risk: 'yellow' };
 }

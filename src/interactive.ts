@@ -2,7 +2,7 @@ import readline from 'node:readline';
 import { RED, GREEN, YELLOW, CYAN, DIM, BOLD, NC } from './colors.js';
 import { FileEntry } from './aggregator.js';
 import { ScanResult } from './scanner.js';
-import { explainPermission } from './explain.js';
+import { explain } from './explain.js';
 
 interface TuiState {
   view: 'list' | 'detail';
@@ -208,15 +208,15 @@ function renderDetail(state: TuiState, withPerms: FileEntry[], results: ScanResu
     if (isOpen) {
       for (const item of group.items) {
         if (state.showInfo) {
-          const info = explainPermission(item.name);
+          const info = explain(group.category, item.name);
           const riskColor = info.risk === 'red' ? RED : info.risk === 'yellow' ? YELLOW : GREEN;
           const dot = `${riskColor}●${NC}`;
-          const maxLen = w - 16;
-          const name = item.name.length > maxLen ? item.name.slice(0, maxLen - 1) + '…' : item.name;
-          navRows.push({ text: `  ${dot} ${DIM}${name}${NC}`, perm: item.name });
-          navRows.push({ text: `      ${DIM}${info.description}${NC}` });
+          const desc = info.description ? `  ${DIM}${info.description}${NC}` : '';
+          const maxLen = w - 8 - (info.description ? info.description.length + 2 : 0);
+          const name = item.name.length > maxLen ? item.name.slice(0, Math.max(8, maxLen) - 1) + '…' : item.name;
+          navRows.push({ text: `  ${dot} ${name}${desc}`, perm: item.name });
         } else {
-          const maxLen = w - 12;
+          const maxLen = w - 8;
           const name = item.name.length > maxLen ? item.name.slice(0, maxLen - 1) + '…' : item.name;
           navRows.push({ text: `  ${DIM}${name}${NC}`, perm: item.name });
         }
