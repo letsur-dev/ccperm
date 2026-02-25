@@ -2,10 +2,17 @@ import fs from 'node:fs';
 import os from 'node:os';
 import { execFileSync } from 'node:child_process';
 
+export interface PermGroup {
+  category: string;
+  items: { name: string; deprecated: boolean }[];
+}
+
 export interface ScanResult {
   path: string;
   display: string;
   permissions: string[];
+  groups: PermGroup[];
+  totalCount: number;
   deprecatedCount: number;
 }
 
@@ -40,5 +47,37 @@ export function scanFile(filePath: string): ScanResult | null {
   const matches = content.match(DEPRECATED_RE);
   const deprecatedCount = matches ? matches.length : 0;
 
-  return { path: filePath, display, permissions: perms, deprecatedCount };
+  const groups = groupPermissions(perms);
+  const totalCount = perms.length;
+
+  return { path: filePath, display, permissions: perms, groups, totalCount, deprecatedCount };
+}
+
+function categorize(perm: string): { category: string; label: string } {
+  if (perm.startsWith('Bash')) {
+    const m = perm.match(/^Bash\((.+)\)$/) || perm.match(/^Bash\((.+)/);
+    return { category: 'Bash', label: m ? m[1] : perm };
+  }
+  if (perm.startsWith('WebFetch')) {
+    const m = perm.match(/^WebFetch\(domain:(.+)\)$/);
+    return { category: 'WebFetch', label: m ? m[1] : perm };
+  }
+  if (perm.startsWith('mcp_') || perm.startsWith('mcp__')) {
+    return { category: 'MCP', label: perm };
+  }
+  if (/^(Read|Write|Edit|Glob|Grep|WebSearch)/.test(perm)) {
+    return { category: 'Tools', label: perm };
+  }
+  return { category: 'Other', label: perm };
+}
+
+function groupPermissions(perms: string[]): PermGroup[] {
+  const map = new Map<string, { name: string; deprecated: boolean }[]>();
+  for (const p of perms) {
+    const { category, label } = categorize(p);
+    if (!map.has(category)) map.set(category, []);
+    map.get(category)!.push({ name: label, deprecated: DEPRECATED_PERM_RE.test(p) });
+  }
+  const order = ['Bash', 'WebFetch', 'MCP', 'Tools', 'Other'];
+  return order.filter((c) => map.has(c)).map((c) => ({ category: c, items: map.get(c)! }));
 }
