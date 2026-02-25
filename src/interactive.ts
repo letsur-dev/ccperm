@@ -3,12 +3,21 @@ import { GREEN, YELLOW, CYAN, DIM, BOLD, NC } from './colors.js';
 import { MergedResult } from './aggregator.js';
 import { ScanResult } from './scanner.js';
 
+interface DetailRow {
+  type: 'file' | 'category' | 'item';
+  label: string;
+  key?: string; // for toggle
+  indent: number;
+}
+
 interface TuiState {
   view: 'list' | 'detail';
   cursor: number;
   scrollOffset: number;
   selectedProject: number;
+  detailCursor: number;
   detailScroll: number;
+  expanded: Set<string>;
 }
 
 export function startInteractive(
@@ -25,7 +34,7 @@ export function startInteractive(
       return;
     }
 
-    const state: TuiState = { view: 'list', cursor: 0, scrollOffset: 0, selectedProject: 0, detailScroll: 0 };
+    const state: TuiState = { view: 'list', cursor: 0, scrollOffset: 0, selectedProject: 0, detailCursor: 0, detailScroll: 0, expanded: new Set() };
 
     readline.emitKeypressEvents(process.stdin);
     if (process.stdin.isTTY) process.stdin.setRawMode(true);
@@ -70,18 +79,24 @@ export function startInteractive(
           state.cursor = Math.min(withPerms.length - 1, state.cursor + 1);
         } else if (key.name === 'return') {
           state.selectedProject = state.cursor;
+          state.detailCursor = 0;
           state.detailScroll = 0;
+          state.expanded = new Set();
           state.view = 'detail';
         }
       } else {
         // detail view
         if (key.name === 'escape' || key.name === 'backspace') {
           state.view = 'list';
+          state.detailCursor = 0;
           state.detailScroll = 0;
         } else if (key.name === 'up') {
-          state.detailScroll = Math.max(0, state.detailScroll - 1);
+          state.detailCursor = Math.max(0, state.detailCursor - 1);
         } else if (key.name === 'down') {
-          state.detailScroll++;
+          state.detailCursor++;
+        } else if (key.name === 'return') {
+          // toggle handled in renderDetail via detailRows
+          (state as any)._toggle = true;
         }
       }
 
@@ -151,6 +166,7 @@ function renderList(state: TuiState, withPerms: MergedResult[], emptyCount: numb
 
 function renderDetail(state: TuiState, withPerms: MergedResult[], results: ScanResult[]): void {
   const rows = process.stdout.rows || 24;
+  const cols = process.stdout.columns || 80;
   const project = withPerms[state.selectedProject];
   if (!project) return;
 
@@ -162,38 +178,67 @@ function renderDetail(state: TuiState, withPerms: MergedResult[], results: ScanR
     return dir === projDir;
   });
 
-  // build content lines
-  const content: string[] = [];
+  // build navigable rows
+  const navRows: { line: string; key?: string }[] = [];
   for (const result of projectResults) {
     if (result.totalCount === 0) continue;
-    // short filename: settings.local.json
     const fileName = result.display.replace(/.*\/\.claude\//, '');
-    content.push(`  ${CYAN}${fileName}${NC}  ${DIM}(${result.totalCount})${NC}`);
+    navRows.push({ line: `  ${CYAN}${fileName}${NC}  ${DIM}(${result.totalCount})${NC}` });
     for (const group of result.groups) {
-      content.push(`    ${YELLOW}${group.category}${NC} ${DIM}(${group.items.length})${NC}`);
-      for (const item of group.items) {
-        content.push(`      ${DIM}${item.name}${NC}`);
+      const key = `${result.path}:${group.category}`;
+      const isOpen = state.expanded.has(key);
+      const arrow = isOpen ? '▾' : '▸';
+      navRows.push({ line: `    ${YELLOW}${arrow} ${group.category}${NC} ${DIM}(${group.items.length})${NC}`, key });
+      if (isOpen) {
+        const maxLen = cols - 10;
+        for (const item of group.items) {
+          const name = item.name.length > maxLen ? item.name.slice(0, maxLen - 1) + '…' : item.name;
+          navRows.push({ line: `      ${DIM}${name}${NC}` });
+        }
       }
     }
-    content.push(`  ${DIM}${'─'.repeat(40)}${NC}`);
   }
 
-  // header + footer take space
+  // handle toggle
+  if ((state as any)._toggle) {
+    delete (state as any)._toggle;
+    const row = navRows[state.detailCursor];
+    if (row?.key) {
+      if (state.expanded.has(row.key)) state.expanded.delete(row.key);
+      else state.expanded.add(row.key);
+      // re-render needed — will happen on next render() call
+      renderDetail(state, withPerms, results);
+      return;
+    }
+  }
+
+  // clamp cursor
+  if (state.detailCursor >= navRows.length) state.detailCursor = Math.max(0, navRows.length - 1);
+
+  // scroll
   const headerLines = 3;
   const footerLines = 2;
   const visibleRows = Math.max(1, rows - headerLines - footerLines);
-  const maxScroll = Math.max(0, content.length - visibleRows);
-  if (state.detailScroll > maxScroll) state.detailScroll = maxScroll;
+  if (state.detailCursor < state.detailScroll) state.detailScroll = state.detailCursor;
+  if (state.detailCursor >= state.detailScroll + visibleRows) state.detailScroll = state.detailCursor - visibleRows + 1;
 
-  const visible = content.slice(state.detailScroll, state.detailScroll + visibleRows);
-  const scrollPct = content.length <= visibleRows ? '' : `  ${DIM}${state.detailScroll + visibleRows}/${content.length}${NC}`;
+  const visible = navRows.slice(state.detailScroll, state.detailScroll + visibleRows);
 
   const lines: string[] = [];
-  lines.push(`  ${CYAN}${BOLD}${project.shortName}${NC}  ${DIM}(${project.totalCount} permissions)${NC}${scrollPct}`);
+  lines.push(`  ${CYAN}${BOLD}${project.shortName}${NC}  ${DIM}(${project.totalCount} permissions)${NC}`);
   lines.push('');
-  lines.push(...visible);
+  for (let i = 0; i < visible.length; i++) {
+    const globalIdx = state.detailScroll + i;
+    const isCursor = globalIdx === state.detailCursor;
+    const row = visible[i];
+    if (isCursor) {
+      lines.push(row.line.replace(/^  /, `${CYAN}> `));
+    } else {
+      lines.push(row.line);
+    }
+  }
   lines.push('');
-  lines.push(`  ${DIM}[↑↓] scroll  [Esc] back  [q] quit${NC}`);
+  lines.push(`  ${DIM}[↑↓] navigate  [Enter] expand/collapse  [Esc] back  [q] quit${NC}`);
 
   process.stdout.write(lines.join('\n') + '\n');
 }
