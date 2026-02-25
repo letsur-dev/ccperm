@@ -1,0 +1,32 @@
+{
+  "name": "ccperm",
+  "version": "1.0.0",
+  "description": "Fix deprecated Claude Code permission patterns (:* → space *)",
+  "bin": {
+    "ccperm": "bin/ccperm.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "claude",
+    "claude-code",
+    "permissions",
+    "cli",
+    "fixer"
+  ],
+  "author": "Amos",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "bin/ccperm.js",
+    "dist"
+  ],
+  "devDependencies": {
+    "@types/node": "^25.3.0",
+    "typescript": "^5.7.0"
+  }
+}
