@@ -8,7 +8,7 @@ import { mergeByProject, summarize } from './aggregator.js';
 import { printCompact, printVerbose, printFooter } from './renderer.js';
 import { startInteractive } from './interactive.js';
 
-const KNOWN_FLAGS = new Set(['--cwd', '--verbose', '--static', '--update', '--fix', '--help', '-h', '--version', '-v']);
+const KNOWN_FLAGS = new Set(['--cwd', '--verbose', '--static', '--update', '--fix', '--debug', '--help', '-h', '--version', '-v']);
 
 const HELP = `${CYAN}ccperm${NC} — Audit Claude Code permissions across projects
 
@@ -74,8 +74,9 @@ async function main() {
     process.stdout.write(`\r  ${CYAN}${frames[frame++ % frames.length]}${NC} Scanning...${countText}`);
   }, 80) : null;
 
+  const isDebug = args.includes('--debug');
   const onProgress = (count: number) => { fileCount = count; };
-  const files = await findSettingsFiles(searchDir, onProgress);
+  const files = await findSettingsFiles(searchDir, onProgress, isDebug);
 
   if (spinner) { clearInterval(spinner); process.stdout.write('\r\x1b[K'); }
   if (files.length === 0) { console.log(`  ${GREEN}✔ No settings files found.${NC}\n`); return; }

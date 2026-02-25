@@ -33,20 +33,41 @@ function isWritable(f: string): boolean {
   try { fs.accessSync(f, fs.constants.W_OK); return true; } catch { return false; }
 }
 
-export function findSettingsFiles(searchDir: string, onProgress?: (count: number) => void): Promise<string[]> {
-  const prune = ['node_modules', '.git', '.cache', '.local', '.npm', '.nvm', '.bun',
-    'snap', '.vscode', '.docker', '.cargo', '.rustup', 'go', '.gradle', '.m2',
-    'Library', '.Trash', 'Pictures', 'Music', 'Videos', 'Downloads'];
+export function findSettingsFiles(searchDir: string, onProgress?: (count: number) => void, debug = false): Promise<string[]> {
+  const prune = [
+    // common
+    'node_modules', '.git', '.cache', '.local', '.npm', '.nvm', '.bun',
+    '.vscode', '.docker', '.cargo', '.rustup', 'go', '.gradle', '.m2',
+    '.Trash', 'Pictures', 'Music', 'Videos', 'Downloads',
+    // linux
+    'snap', '.snap',
+    // macOS
+    'Library', 'Applications', '.Spotlight-V100', '.fseventsd',
+    'Movies', 'Photos', '.iCloud',
+  ];
   const pruneArgs = prune.flatMap((d) => ['-name', d, '-o']).slice(0, -1);
+
+  const findArgs = [
+    searchDir,
+    '(', ...pruneArgs, ')', '-prune',
+    '-o', '-path', '*/.claude/settings*.json', '-type', 'f', '-print',
+  ];
+
+  if (debug) {
+    console.error(`\n  [debug] find ${findArgs.join(' ')}`);
+    console.error(`  [debug] prune: ${prune.join(', ')}`);
+  }
+
+  const t0 = Date.now();
 
   return new Promise((resolve) => {
     const results: string[] = [];
     let buf = '';
-    const child = execFile('find', [
-      searchDir,
-      '(', ...pruneArgs, ')', '-prune',
-      '-o', '-path', '*/.claude/settings*.json', '-type', 'f', '-print',
-    ], { encoding: 'utf8', timeout: 15000 });
+    const child = execFile('find', findArgs, { encoding: 'utf8', timeout: 30000 });
+
+    child.stderr?.on('data', (chunk: string) => {
+      if (debug) process.stderr.write(`  [debug] stderr: ${chunk}`);
+    });
 
     child.stdout?.on('data', (chunk: string) => {
       buf += chunk;
@@ -58,13 +79,21 @@ export function findSettingsFiles(searchDir: string, onProgress?: (count: number
       onProgress?.(results.length);
     });
 
-    child.on('close', () => {
+    child.on('close', (code) => {
       if (buf && isWritable(buf)) results.push(buf);
       onProgress?.(results.length);
+      if (debug) {
+        console.error(`  [debug] find exited with code ${code} in ${Date.now() - t0}ms`);
+        console.error(`  [debug] found ${results.length} files`);
+        results.forEach((f) => console.error(`  [debug]   ${f}`));
+      }
       resolve(results);
     });
 
-    child.on('error', () => resolve(results));
+    child.on('error', (err) => {
+      if (debug) console.error(`  [debug] find error: ${err.message}`);
+      resolve(results);
+    });
   });
 }
 
