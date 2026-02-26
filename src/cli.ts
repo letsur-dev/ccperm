@@ -98,6 +98,15 @@ async function main() {
   const entries = toFileEntries(results);
   const summary = summarize(results);
 
+  if (args.includes('--fix')) {
+    const affected = countDeprecated(results);
+    if (affected.length === 0) { console.log(`  ${GREEN}✔ Nothing to fix.${NC}\n`); return; }
+    const { totalPatterns, fixedFiles } = fixFiles(affected);
+    console.log(`  ${GREEN}✔ Fixed ${totalPatterns} patterns in ${fixedFiles} files.${NC}`);
+    console.log(`  ${DIM}Restart Claude Code for changes to take effect.${NC}\n`);
+    return;
+  }
+
   if (!isStatic) {
     await startInteractive(entries, results);
     return;
@@ -105,14 +114,6 @@ async function main() {
 
   if (isVerbose) { printVerbose(results, summary); } else { printCompact(entries, summary); }
   printFooter(summary);
-
-  if (args.includes('--fix')) {
-    const affected = countDeprecated(results);
-    if (affected.length === 0) { console.log(`\n  ${GREEN}✔ Nothing to fix.${NC}\n`); return; }
-    const { totalPatterns, fixedFiles } = fixFiles(affected);
-    console.log(`\n  ${GREEN}✔ Fixed ${totalPatterns} patterns in ${fixedFiles} files.${NC}`);
-    console.log(`  ${DIM}Restart Claude Code for changes to take effect.${NC}\n`);
-  }
 }
 
 main();
