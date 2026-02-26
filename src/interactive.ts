@@ -1,7 +1,7 @@
 import readline from 'node:readline';
 import { RED, GREEN, YELLOW, CYAN, DIM, BOLD, NC } from './colors.js';
 import { FileEntry } from './aggregator.js';
-import { ScanResult } from './scanner.js';
+import { ScanResult, scanFile, removePerm, addPermToGlobal } from './scanner.js';
 import { explain, Severity } from './explain.js';
 
 function severityTag(s: Severity): string {
@@ -36,6 +36,9 @@ interface TuiState {
   detailScroll: number;
   expanded: Set<string>;
   showInfo: boolean;
+  confirmDelete?: { perm: string; rawPerm: string; filePath: string };
+  confirmGlobal?: { perm: string; rawPerm: string };
+  flash?: string;
 }
 
 // strip ANSI escape codes for visible length
@@ -60,7 +63,7 @@ function boxTop(title: string, info: string, width: number): string {
 function boxBottom(hint: string, width: number): string {
   const inner = width - 2;
   const hintPart = ` ${hint} `;
-  const fill = Math.max(0, inner - hintPart.length);
+  const fill = Math.max(0, inner - visLen(hintPart));
   return `${DIM}└${'─'.repeat(fill)}${hintPart}┘${NC}`;
 }
 
@@ -125,7 +128,37 @@ export function startInteractive(
           state.view = 'detail';
         }
       } else {
-        if (key.name === 'escape' || key.name === 'backspace') {
+        if (state.confirmDelete) {
+          if (key.name === 'y') {
+            const { rawPerm, filePath } = state.confirmDelete;
+            if (removePerm(filePath, rawPerm)) {
+              const idx = results.findIndex((r) => r.path === filePath);
+              if (idx >= 0) {
+                const updated = scanFile(filePath);
+                if (updated) {
+                  results[idx] = updated;
+                  const entry = withPerms[state.selectedProject];
+                  entry.totalCount = updated.totalCount;
+                  entry.groups = new Map();
+                  for (const g of updated.groups) entry.groups.set(g.category, g.items.length);
+                }
+              }
+              state.flash = `${GREEN}✔ Deleted${NC}`;
+            }
+            state.confirmDelete = undefined;
+          } else {
+            state.confirmDelete = undefined;
+          }
+        } else if (state.confirmGlobal) {
+          if (key.name === 'y') {
+            if (addPermToGlobal(state.confirmGlobal.rawPerm)) {
+              state.flash = `${GREEN}✔ Copied to global${NC}`;
+            } else {
+              state.flash = `${DIM}· Already in global${NC}`;
+            }
+          }
+          state.confirmGlobal = undefined;
+        } else if (key.name === 'escape' || key.name === 'backspace') {
           state.view = 'list';
           state.detailCursor = 0;
           state.detailScroll = 0;
@@ -137,6 +170,10 @@ export function startInteractive(
           (state as any)._toggle = true;
         } else if (key.name === 'i') {
           state.showInfo = !state.showInfo;
+        } else if (key.name === 'd') {
+          (state as any)._delete = true;
+        } else if (key.name === 'g') {
+          (state as any)._global = true;
         }
       }
 
@@ -274,7 +311,7 @@ function renderDetail(state: TuiState, withPerms: FileEntry[], results: ScanResu
   if (!fileResult || fileResult.totalCount === 0) return;
 
   // build navigable rows
-  const navRows: { text: string; key?: string; perm?: string }[] = [];
+  const navRows: { text: string; key?: string; perm?: string; rawPerm?: string }[] = [];
   for (const group of fileResult.groups) {
     const key = `${fileResult.path}:${group.category}`;
     const isOpen = state.expanded.has(key);
@@ -283,6 +320,8 @@ function renderDetail(state: TuiState, withPerms: FileEntry[], results: ScanResu
     if (isOpen) {
       for (const item of group.items) {
         const clean = cleanLabel(item.name);
+        // Find the raw permission string from the original permissions array
+        const rawPerm = fileResult.permissions.find((p) => p.includes(item.name)) || '';
         if (state.showInfo) {
           const info = explain(group.category, item.name);
           const tag = severityTag(info.risk);
@@ -290,11 +329,11 @@ function renderDetail(state: TuiState, withPerms: FileEntry[], results: ScanResu
           const nameMax = Math.min(30, w - tagLen - 14);
           const name = clean.length > nameMax ? clean.slice(0, nameMax - 1) + '…' : clean;
           const desc = info.description ? `${DIM}${info.description}${NC}` : '';
-          navRows.push({ text: `  ${pad(name, nameMax)} ${tag} ${desc}`, perm: item.name });
+          navRows.push({ text: `  ${pad(name, nameMax)} ${tag} ${desc}`, perm: item.name, rawPerm });
         } else {
           const maxLen = w - 8;
           const name = clean.length > maxLen ? clean.slice(0, maxLen - 1) + '…' : clean;
-          navRows.push({ text: `  ${DIM}${name}${NC}`, perm: item.name });
+          navRows.push({ text: `  ${DIM}${name}${NC}`, perm: item.name, rawPerm });
         }
       }
     }
@@ -309,6 +348,24 @@ function renderDetail(state: TuiState, withPerms: FileEntry[], results: ScanResu
       else state.expanded.add(row.key);
       renderDetail(state, withPerms, results);
       return;
+    }
+  }
+
+  // handle delete
+  if ((state as any)._delete) {
+    delete (state as any)._delete;
+    const row = navRows[state.detailCursor];
+    if (row?.rawPerm) {
+      state.confirmDelete = { perm: row.perm!, rawPerm: row.rawPerm, filePath: fileResult.path };
+    }
+  }
+
+  // handle global copy
+  if ((state as any)._global) {
+    delete (state as any)._global;
+    const row = navRows[state.detailCursor];
+    if (row?.rawPerm && !project.isGlobal) {
+      state.confirmGlobal = { perm: row.perm!, rawPerm: row.rawPerm };
     }
   }
 
@@ -334,8 +391,22 @@ function renderDetail(state: TuiState, withPerms: FileEntry[], results: ScanResu
     lines.push(boxLine(`${prefix}${row.text}`, w));
   }
 
-  const infoHint = state.showInfo ? '[i] hide info' : '[i] info';
-  lines.push(boxBottom(`[↑↓] navigate  [Enter] expand  ${infoHint}  [Esc] back  [q] quit`, w));
+  if (state.flash) {
+    lines.push(boxBottom(state.flash, w));
+    state.flash = undefined;
+  } else if (state.confirmDelete) {
+    const name = cleanLabel(state.confirmDelete.perm);
+    const truncName = name.length > 30 ? name.slice(0, 29) + '…' : name;
+    lines.push(boxBottom(`${RED}Delete "${truncName}"? [y/N]${NC}`, w));
+  } else if (state.confirmGlobal) {
+    const name = cleanLabel(state.confirmGlobal.perm);
+    const truncName = name.length > 30 ? name.slice(0, 29) + '…' : name;
+    lines.push(boxBottom(`${CYAN}Copy "${truncName}" to global? [y/N]${NC}`, w));
+  } else {
+    const infoHint = state.showInfo ? '[i] hide info' : '[i] info';
+    const globalHint = project.isGlobal ? '' : '  [g] global';
+    lines.push(boxBottom(`[↑↓] navigate  [Enter] expand  ${infoHint}  [d] delete${globalHint}  [Esc] back  [q] quit`, w));
+  }
 
   process.stdout.write(lines.join('\n') + '\n');
 }

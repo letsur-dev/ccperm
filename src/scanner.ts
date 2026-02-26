@@ -19,6 +19,50 @@ export interface ScanResult {
 const PERM_RE = /"(Bash|Write|Edit|Read|Glob|Grep|WebSearch|WebFetch|mcp_)[^"]*"/g;
 const DEPRECATED_RE = /:\*\)|:\*"/g;
 
+const AUDIT_DIR = path.join(os.homedir(), '.ccperm', 'audit');
+
+function writeAudit(action: string, filePath: string, perm: string, before: string[], after: string[]): void {
+  try {
+    fs.mkdirSync(AUDIT_DIR, { recursive: true });
+    const ts = new Date().toISOString().replace(/[:.]/g, '-');
+    const entry = { action, file: filePath, perm, before, after, timestamp: new Date().toISOString() };
+    fs.writeFileSync(path.join(AUDIT_DIR, `${ts}_${action}.json`), JSON.stringify(entry, null, 2) + '\n');
+  } catch { /* audit is best-effort */ }
+}
+
+export function removePerm(filePath: string, rawPerm: string): boolean {
+  let content: string;
+  try { content = fs.readFileSync(filePath, 'utf8'); } catch { return false; }
+  let json: any;
+  try { json = JSON.parse(content); } catch { return false; }
+  const allow: string[] = json?.permissions?.allow;
+  if (!Array.isArray(allow)) return false;
+  const idx = allow.indexOf(rawPerm);
+  if (idx === -1) return false;
+  const before = [...allow];
+  allow.splice(idx, 1);
+  fs.writeFileSync(filePath, JSON.stringify(json, null, 2) + '\n', 'utf8');
+  writeAudit('DELETE', filePath, rawPerm, before, allow);
+  return true;
+}
+
+export function addPermToGlobal(rawPerm: string): boolean {
+  const globalPath = path.join(os.homedir(), '.claude', 'settings.json');
+  let content: string;
+  try { content = fs.readFileSync(globalPath, 'utf8'); } catch { content = '{}'; }
+  let json: any;
+  try { json = JSON.parse(content); } catch { return false; }
+  if (!json.permissions) json.permissions = {};
+  if (!Array.isArray(json.permissions.allow)) json.permissions.allow = [];
+  const allow: string[] = json.permissions.allow;
+  if (allow.includes(rawPerm)) return false; // already exists
+  const before = [...allow];
+  allow.push(rawPerm);
+  fs.writeFileSync(globalPath, JSON.stringify(json, null, 2) + '\n', 'utf8');
+  writeAudit('COPY_TO_GLOBAL', globalPath, rawPerm, before, allow);
+  return true;
+}
+
 export function countDeprecated(results: ScanResult[]): { path: string; count: number }[] {
   const out: { path: string; count: number }[] = [];
   for (const r of results) {
