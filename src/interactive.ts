@@ -23,8 +23,7 @@ function cleanLabel(label: string): string {
   if (s.includes('<<')) s = s.replace(/\s*<<\s*['"]?\w+['"]?.*$/, ' (heredoc)');
   // Truncate inline scripts with \n
   if (s.includes('\\n')) s = s.replace(/\\n.*$/, '…');
-  // Strip :* and trailing * suffix
-  s = s.replace(/:\*$/, ' *');
+  // Show deprecated :* as-is (don't normalize to space)
   return s;
 }
 
