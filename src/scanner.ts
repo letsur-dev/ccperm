@@ -119,14 +119,10 @@ function categorize(perm: string): { category: string; label: string } {
     const m = perm.match(/^Bash\((.+)\)$/) || perm.match(/^Bash\((.+)/);
     return { category: 'Bash', label: m ? m[1] : perm };
   }
-  if (perm.startsWith('WebFetch')) {
-    const m = perm.match(/^WebFetch\(domain:(.+)\)$/);
-    return { category: 'WebFetch', label: m ? m[1] : perm };
-  }
   if (perm.startsWith('mcp_') || perm.startsWith('mcp__')) {
     return { category: 'MCP', label: perm };
   }
-  if (/^(Read|Write|Edit|Glob|Grep|WebSearch)/.test(perm)) {
+  if (/^(Read|Write|Edit|Glob|Grep|WebSearch|WebFetch)/.test(perm)) {
     return { category: 'Tools', label: perm };
   }
   return { category: 'Other', label: perm };
@@ -139,6 +135,6 @@ function groupPermissions(perms: string[]): PermGroup[] {
     if (!map.has(category)) map.set(category, []);
     map.get(category)!.push({ name: label });
   }
-  const order = ['Bash', 'WebFetch', 'MCP', 'Tools', 'Other'];
+  const order = ['Bash', 'MCP', 'Tools', 'Other'];
   return order.filter((c) => map.has(c)).map((c) => ({ category: c, items: map.get(c)! }));
 }

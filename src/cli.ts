@@ -65,7 +65,6 @@ async function main() {
   const isCwd = args.includes('--cwd');
   const isVerbose = args.includes('--verbose');
   const isStatic = args.includes('--static') || !process.stdout.isTTY;
-
   console.log(`\n  ${CYAN}${BOLD}ccperm${NC} ${DIM}v${getVersion()}${NC}  —  Claude Code Permission Audit\n`);
 
   const searchDir = isCwd ? process.cwd() : os.homedir();
@@ -90,13 +89,14 @@ async function main() {
   console.log(`  ${GREEN}✔${NC} Found ${CYAN}${files.length}${NC} settings files\n`);
 
   const results: ScanResult[] = files.map(scanFile).filter((r): r is ScanResult => r !== null);
-  const entries = toFileEntries(results);
-  const summary = summarize(results);
 
   if (args.includes('--hey-claude-witness-me')) {
     console.log(analyze(results));
     return;
   }
+
+  const entries = toFileEntries(results);
+  const summary = summarize(results);
 
   if (!isStatic) {
     await startInteractive(entries, results);

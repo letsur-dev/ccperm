@@ -12,7 +12,7 @@ function rpad(s: string | number, n: number): string {
 }
 
 export function printCompact(entries: FileEntry[], summary: AuditSummary): void {
-  const cats = ['Bash', 'WebFetch', 'MCP', 'Tools'];
+  const cats = ['Bash', 'MCP', 'Tools'];
   const catsPresent = cats.filter((c) =>
     entries.some((r) => r.groups.has(c))
   );

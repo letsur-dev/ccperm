@@ -288,8 +288,10 @@ export function explainTool(label: string): PermInfo {
 
 export function explain(category: string, label: string): PermInfo {
   if (category === 'Bash') return explainBash(label);
-  if (category === 'WebFetch') return explainWebFetch(label);
   if (category === 'MCP') return explainMcp(label);
-  if (category === 'Tools') return explainTool(label);
+  if (category === 'Tools') {
+    if (label.startsWith('WebFetch')) return explainWebFetch(label);
+    return explainTool(label);
+  }
   return { description: '', risk: 'medium' };
 }
