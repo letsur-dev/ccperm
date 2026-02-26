@@ -78,6 +78,7 @@ export function startInteractive(
     const projects = merged.filter((r) => r.totalCount > 0 && !r.isGlobal).sort((a, b) => b.totalCount - a.totalCount);
     const withPerms = [...globals, ...projects];
     const emptyCount = merged.filter((r) => r.totalCount === 0 && !r.isGlobal).length;
+    const riskMap = buildRiskMap(results);
 
     if (withPerms.length === 0) {
       console.log(`\n  ${GREEN}No projects with permissions found.${NC}\n`);
@@ -104,7 +105,7 @@ export function startInteractive(
 
     const render = () => {
       process.stdout.write('\x1b[2J\x1b[H\x1b[?25l');
-      if (state.view === 'list') renderList(state, withPerms, emptyCount);
+      if (state.view === 'list') renderList(state, withPerms, emptyCount, riskMap);
       else renderDetail(state, withPerms, results);
     };
 
@@ -147,18 +148,40 @@ export function startInteractive(
   });
 }
 
-function renderList(state: TuiState, withPerms: FileEntry[], emptyCount: number): void {
+function buildRiskMap(results: ScanResult[]): Map<string, { critical: number; high: number }> {
+  const map = new Map<string, { critical: number; high: number }>();
+  for (const r of results) {
+    let crit = 0, hi = 0;
+    for (const g of r.groups) {
+      for (const item of g.items) {
+        const info = explain(g.category, item.name);
+        if (info.risk === 'critical') crit++;
+        else if (info.risk === 'high') hi++;
+      }
+    }
+    map.set(r.display, { critical: crit, high: hi });
+  }
+  return map;
+}
+
+function renderList(state: TuiState, withPerms: FileEntry[], emptyCount: number, riskMap: Map<string, { critical: number; high: number }>): void {
   const rows = process.stdout.rows || 24;
   const cols = process.stdout.columns || 80;
-  const w = Math.min(cols, 82);
-  const inner = w - 4; // box border + 1 space each side
 
-  const cats = ['Bash', 'WebFetch', 'MCP', 'Tools'];
+  const cats = ['Bash', 'MCP', 'Tools'];
   const catsPresent = cats.filter((c) => withPerms.some((r) => r.groups.has(c)));
 
+  const hasRisk = [...riskMap.values()].some((v) => v.critical > 0 || v.high > 0);
+  const riskColWidth = hasRisk ? 3 : 0;
   const catColWidth = catsPresent.length * 7;
+  const typeColWidth = 7;
   const maxName = Math.max(...withPerms.map((r) => r.shortName.length), 7);
-  const nameWidth = Math.min(maxName, inner - catColWidth - 16);
+  const nameColWidth = Math.min(maxName + typeColWidth, 35);
+  const nameWidth = nameColWidth - typeColWidth;
+  // content: marker(2) + nameCol + gap(2) + catCols + gap(2) + total(5) + gap(1) + riskCol
+  const contentWidth = 2 + nameColWidth + 2 + catColWidth + 2 + 5 + (hasRisk ? 1 + riskColWidth : 0);
+  const w = Math.min(cols, contentWidth + 4);
+  const inner = w - 4;
 
   const hasGlobalSep = withPerms.some((r) => r.isGlobal) && withPerms.some((r) => !r.isGlobal);
   // box takes: top(1) + header(2) + sep(1) + content + globalSep?(1) + emptyLine?(1) + bottom(1)
@@ -172,7 +195,8 @@ function renderList(state: TuiState, withPerms: FileEntry[], emptyCount: number)
   const lines: string[] = [];
 
   lines.push(boxTop('ccperm', scrollInfo, w));
-  lines.push(boxLine(`${DIM}${pad('PROJECT', nameWidth)}  ${catsPresent.map((c) => rpad(c, 5)).join('  ')}  TOTAL${NC}`, w));
+  const riskHeader = hasRisk ? ` ${DIM}⚠${NC}` : '';
+  lines.push(boxLine(`${DIM}${pad('PROJECT', nameColWidth)}  ${catsPresent.map((c) => rpad(c, 5)).join('  ')}  TOTAL${NC}${riskHeader}`, w));
   lines.push(boxSep(w));
 
   const globalCount = withPerms.filter((r) => r.isGlobal).length;
@@ -194,7 +218,14 @@ function renderList(state: TuiState, withPerms: FileEntry[], emptyCount: number)
     }).join('  ');
 
     const totalCol = isCursor ? `${BOLD}${rpad(r.totalCount, 5)}${NC}` : rpad(r.totalCount, 5);
-    lines.push(boxLine(`${nameCol}  ${catCols}  ${totalCol}`, w));
+    let riskCol = '';
+    if (hasRisk) {
+      const risk = riskMap.get(r.display) || { critical: 0, high: 0 };
+      if (risk.critical > 0) riskCol = ` ${RED}${rpad(risk.critical, 2)}${NC}`;
+      else if (risk.high > 0) riskCol = ` ${YELLOW}${rpad(risk.high, 2)}${NC}`;
+      else riskCol = ` ${DIM}${rpad('·', 2)}${NC}`;
+    }
+    lines.push(boxLine(`${nameCol}  ${catCols}  ${totalCol}${riskCol}`, w));
 
     // separator after global section
     if (r.isGlobal && i + 1 < withPerms.length && !withPerms[i + 1].isGlobal) {
