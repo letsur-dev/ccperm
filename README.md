@@ -6,7 +6,7 @@ Audit Claude Code permissions across all your projects.
 
 Claude Code stores allowed permissions (Bash commands, WebFetch domains, MCP tools, etc.) in `.claude/settings*.json` per project. As you work across many projects, these permissions pile up silently. **ccperm** scans your home directory, finds every settings file, and shows what you've allowed — in an interactive TUI or static text output.
 
-<img src="./screenshot.png" width="600" />
+<img src="./demo.gif" width="600" />
 
 ## Quick Start
 
@@ -41,25 +41,24 @@ By default, ccperm scans all projects under `~` and launches an interactive TUI.
 
 When running in a TTY (the default), ccperm opens a box-frame TUI:
 
-**List view** — Projects sorted by permission count. `~/.claude` section at top with a separator. Each row shows category counts (Bash, WebFetch, MCP, Tools) and a `shared`/`local` label distinguishing `settings.json` vs `settings.local.json`.
+**List view** — Projects sorted by permission count. Columns: Bash, MCP, Tools, TOTAL, `!` (risk warnings), `†` (deprecated `:*` patterns).
 
 ```
-┌ ccperm ──────────────────────────────── 1/8 ┐
-│ PROJECT          Bash  WebFetch   MCP  TOTAL │
-├──────────────────────────────────────────────┤
-│  ~/.claude                        2       2 │
-├──────────────────────────────────────────────┤
-│▸ my-project  local  5       3     ·      8  │
-│  other-app   shared 2       ·     3      5  │
-│  ...                                        │
-└ [↑↓] navigate  [Enter] detail  [q] quit ────┘
+┌ ccperm ──────────────────────────── 1/8 ┐
+│   PROJECT         Bash MCP Tools TOTAL  │
+├─────────────────────────────────────────┤
+│   ~/.claude                  2      2   │
+├─────────────────────────────────────────┤
+│ ▸ my-project  local  5   ·    3    8    │
+│   other-app   shared 2   3    ·    5    │
+└ [↑↓] navigate  [Enter] detail  [q] quit┘
 ```
 
-**Detail view** — Press Enter to expand a project. Categories are collapsible; press Enter to toggle.
+**Detail view** — Press Enter to expand a project. Categories are collapsible; press Enter to toggle. Press `[d]` to delete a permission, `[g]` to copy it to global settings.
 
-**Info mode** — Press `[i]` to show descriptions for each permission.
+**Info mode** — Press `[i]` to show risk level and description for each permission.
 
-Keys: `↑↓` navigate, `Enter` select/expand, `[i]` toggle info, `Esc`/`Backspace` back, `q`/`Ctrl+C` quit.
+Keys: `↑↓` navigate, `Enter` select/expand, `[i]` info, `[d]` delete, `[g]` copy to global, `Esc` back, `q` quit.
 
 ## Static Output
 

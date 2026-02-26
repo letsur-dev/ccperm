@@ -6,7 +6,7 @@
 
 Claude Code는 프로젝트마다 `.claude/settings*.json`에 허용한 권한(Bash 명령, WebFetch 도메인, MCP 도구 등)을 저장합니다. 여러 프로젝트를 오가다 보면 어디서 뭘 허용했는지 파악하기 어려운데, **ccperm**은 홈 디렉토리 전체를 스캔해서 모든 설정 파일을 찾고, 인터랙티브 TUI 또는 텍스트로 보여줍니다.
 
-<img src="./screenshot.png" width="600" />
+<img src="./demo.gif" width="600" />
 
 ## 빠른 시작
 
@@ -41,25 +41,24 @@ ccperm
 
 TTY 환경(기본)에서는 박스 프레임 TUI가 실행됩니다:
 
-**목록 뷰** — 프로젝트가 권한 수 기준으로 정렬됩니다. 상단에 `~/.claude` 섹션이 구분선과 함께 표시됩니다. 각 행은 카테고리별 개수(Bash, WebFetch, MCP, Tools)와 `shared`/`local` 라벨로 `settings.json`과 `settings.local.json`을 구분합니다.
+**목록 뷰** — 프로젝트가 권한 수 기준으로 정렬됩니다. 컬럼: Bash, MCP, Tools, TOTAL, `!` (위험도 경고), `†` (deprecated `:*` 패턴).
 
 ```
-┌ ccperm ──────────────────────────────── 1/8 ┐
-│ PROJECT          Bash  WebFetch   MCP  TOTAL │
-├──────────────────────────────────────────────┤
-│  ~/.claude                        2       2 │
-├──────────────────────────────────────────────┤
-│▸ my-project  local  5       3     ·      8  │
-│  other-app   shared 2       ·     3      5  │
-│  ...                                        │
-└ [↑↓] navigate  [Enter] detail  [q] quit ────┘
+┌ ccperm ──────────────────────────── 1/8 ┐
+│   PROJECT         Bash MCP Tools TOTAL  │
+├─────────────────────────────────────────┤
+│   ~/.claude                  2      2   │
+├─────────────────────────────────────────┤
+│ ▸ my-project  local  5   ·    3    8    │
+│   other-app   shared 2   3    ·    5    │
+└ [↑↓] navigate  [Enter] detail  [q] quit┘
 ```
 
-**상세 뷰** — Enter로 프로젝트를 펼칩니다. 카테고리를 Enter로 접고 펼 수 있습니다.
+**상세 뷰** — Enter로 프로젝트를 펼칩니다. 카테고리를 Enter로 접고 펼 수 있습니다. `[d]`로 권한 삭제, `[g]`로 글로벌 설정에 복사할 수 있습니다.
 
-**정보 모드** — `[i]`를 누르면 각 권한에 대한 설명이 나타납니다.
+**정보 모드** — `[i]`를 누르면 각 권한의 위험도와 설명이 나타납니다.
 
-키 조작: `↑↓` 이동, `Enter` 선택/펼치기, `[i]` 정보 토글, `Esc`/`Backspace` 뒤로, `q`/`Ctrl+C` 종료.
+키 조작: `↑↓` 이동, `Enter` 선택/펼치기, `[i]` 정보, `[d]` 삭제, `[g]` 글로벌 복사, `Esc` 뒤로, `q` 종료.
 
 ## 텍스트 출력
 
