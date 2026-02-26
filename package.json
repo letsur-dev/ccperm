@@ -1,6 +1,6 @@
 {
   "name": "ccperm",
-  "version": "1.12.0",
+  "version": "1.12.1",
   "description": "Audit Claude Code permissions across all your projects",
   "bin": {
     "ccperm": "bin/ccperm.js"
