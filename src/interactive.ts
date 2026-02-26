@@ -78,6 +78,7 @@ export function startInteractive(
     const withPerms = [...globals, ...projects];
     const emptyCount = merged.filter((r) => r.totalCount === 0 && !r.isGlobal).length;
     const riskMap = buildRiskMap(results);
+    const depMap = buildDeprecatedMap(results);
 
     if (withPerms.length === 0) {
       console.log(`\n  ${GREEN}No projects with permissions found.${NC}\n`);
@@ -104,7 +105,7 @@ export function startInteractive(
 
     const render = () => {
       process.stdout.write('\x1b[2J\x1b[H\x1b[?25l');
-      if (state.view === 'list') renderList(state, withPerms, emptyCount, riskMap);
+      if (state.view === 'list') renderList(state, withPerms, emptyCount, riskMap, depMap);
       else renderDetail(state, withPerms, results);
     };
 
@@ -147,6 +148,18 @@ export function startInteractive(
   });
 }
 
+function buildDeprecatedMap(results: ScanResult[]): Map<string, number> {
+  const map = new Map<string, number>();
+  for (const r of results) {
+    let count = 0;
+    for (const p of r.permissions) {
+      if (p.includes(':*')) count++;
+    }
+    if (count > 0) map.set(r.display, count);
+  }
+  return map;
+}
+
 function buildRiskMap(results: ScanResult[]): Map<string, { critical: number; high: number }> {
   const map = new Map<string, { critical: number; high: number }>();
   for (const r of results) {
@@ -163,7 +176,7 @@ function buildRiskMap(results: ScanResult[]): Map<string, { critical: number; hi
   return map;
 }
 
-function renderList(state: TuiState, withPerms: FileEntry[], emptyCount: number, riskMap: Map<string, { critical: number; high: number }>): void {
+function renderList(state: TuiState, withPerms: FileEntry[], emptyCount: number, riskMap: Map<string, { critical: number; high: number }>, depMap: Map<string, number>): void {
   const rows = process.stdout.rows || 24;
   const cols = process.stdout.columns || 80;
 
@@ -171,14 +184,16 @@ function renderList(state: TuiState, withPerms: FileEntry[], emptyCount: number,
   const catsPresent = cats.filter((c) => withPerms.some((r) => r.groups.has(c)));
 
   const hasRisk = [...riskMap.values()].some((v) => v.critical > 0 || v.high > 0);
+  const hasDep = depMap.size > 0;
   const riskColWidth = hasRisk ? 3 : 0;
+  const depColWidth = hasDep ? 3 : 0;
   const catColWidth = catsPresent.length * 7;
   const typeColWidth = 7;
   const maxName = Math.max(...withPerms.map((r) => r.shortName.length), 7);
   const nameColWidth = Math.min(maxName + typeColWidth, 35);
   const nameWidth = nameColWidth - typeColWidth;
-  // content: marker(2) + nameCol + gap(2) + catCols + gap(2) + total(5) + gap(1) + riskCol
-  const contentWidth = 2 + nameColWidth + 2 + catColWidth + 2 + 5 + (hasRisk ? 1 + riskColWidth : 0);
+  // content: marker(2) + nameCol + gap(2) + catCols + gap(2) + total(5) + riskCol(3) + depCol(3)
+  const contentWidth = 2 + nameColWidth + 2 + catColWidth + 2 + 5 + (hasRisk ? riskColWidth : 0) + (hasDep ? depColWidth : 0);
   const w = Math.min(cols, contentWidth + 4);
   const inner = w - 4;
 
@@ -194,8 +209,9 @@ function renderList(state: TuiState, withPerms: FileEntry[], emptyCount: number,
   const lines: string[] = [];
 
   lines.push(boxTop('ccperm', scrollInfo, w));
-  const riskHeader = hasRisk ? ` ${DIM}⚠${NC}` : '';
-  lines.push(boxLine(`${DIM}${pad('PROJECT', nameColWidth)}  ${catsPresent.map((c) => rpad(c, 5)).join('  ')}  TOTAL${NC}${riskHeader}`, w));
+  const riskHeader = hasRisk ? ` ${rpad('!', 2)}` : '';
+  const depHeader = hasDep ? ` ${rpad('†', 2)}` : '';
+  lines.push(boxLine(`${DIM}  ${pad('PROJECT', nameColWidth)}  ${catsPresent.map((c) => rpad(c, 5)).join('  ')}  ${rpad('TOTAL', 5)}${riskHeader}${depHeader}${NC}`, w));
   lines.push(boxSep(w));
 
   const globalCount = withPerms.filter((r) => r.isGlobal).length;
@@ -224,7 +240,13 @@ function renderList(state: TuiState, withPerms: FileEntry[], emptyCount: number,
       else if (risk.high > 0) riskCol = ` ${YELLOW}${rpad(risk.high, 2)}${NC}`;
       else riskCol = ` ${DIM}${rpad('·', 2)}${NC}`;
     }
-    lines.push(boxLine(`${nameCol}  ${catCols}  ${totalCol}${riskCol}`, w));
+    let depCol = '';
+    if (hasDep) {
+      const dep = depMap.get(r.display) || 0;
+      if (dep > 0) depCol = ` ${DIM}${rpad(dep, 2)}${NC}`;
+      else depCol = ` ${DIM}${rpad('·', 2)}${NC}`;
+    }
+    lines.push(boxLine(`${nameCol}  ${catCols}  ${totalCol}${riskCol}${depCol}`, w));
 
     // separator after global section
     if (r.isGlobal && i + 1 < withPerms.length && !withPerms[i + 1].isGlobal) {
