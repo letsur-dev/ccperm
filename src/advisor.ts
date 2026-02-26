@@ -147,7 +147,19 @@ export function analyze(results: ScanResult[]): string {
     hints.push(`${heredocTotal} one-time/heredoc permissions found (${topStr}). Safe to remove.`);
   }
 
-  // 3. Global check
+  // 3. WebFetch → suggest global wildcard
+  let webFetchTotal = 0;
+  let webFetchProjects = 0;
+  for (const r of results) {
+    const wf = r.groups.find((g) => g.category === 'WebFetch');
+    if (wf) { webFetchTotal += wf.items.length; webFetchProjects++; }
+  }
+  const hasGlobalWebFetch = results.some((r) => r.isGlobal && r.groups.some((g) => g.category === 'WebFetch'));
+  if (webFetchProjects >= 3 && !hasGlobalWebFetch) {
+    hints.push(`WebFetch permissions found in ${webFetchProjects} projects (${webFetchTotal} domains total). WebFetch is read-only — add \`"WebFetch(*)"\` to ~/.claude/settings.json to skip per-domain approval globally.`);
+  }
+
+  // 4. Global check
   const globalEntries = entries.filter((e) => e.isGlobal);
   const globalPerms = globalEntries.reduce((sum, e) => sum + e.totalCount, 0);
   if (globalPerms === 0 && frequent.length > 0) {
