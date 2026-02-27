@@ -28,8 +28,11 @@ This is a widely reported problem with many open issues on [anthropics/claude-co
 | [#14595](https://github.com/anthropics/claude-code/issues/14595) | pipe | Inconsistent: `pwd \| awk` fails but `pwd \| sed` works |
 | [#28784](https://github.com/anthropics/claude-code/issues/28784) | && | **Security**: `cd:*` allows `cd && python3 script.py` |
 | [#16180](https://github.com/anthropics/claude-code/issues/16180) | && | Only first command validated, rest bypassed |
-| [#25441](https://github.com/anthropics/claude-code/issues/25441) | heredoc | Full heredoc content saved verbatim to settings.json |
+| [#16481](https://github.com/anthropics/claude-code/issues/16481) | multiline | Multi-line bash split into invalid permission entries (`do echo \`, `do grep \`) |
+| [#25341](https://github.com/anthropics/claude-code/issues/25341) | heredoc | Full heredoc content saved verbatim to settings.json |
 | [#15742](https://github.com/anthropics/claude-code/issues/15742) | heredoc | Multiline patterns corrupt settings.json |
+| [#11932](https://github.com/anthropics/claude-code/issues/11932) | multiline | Auto-approve patterns don't match multiline commands |
+| [#27688](https://github.com/anthropics/claude-code/issues/27688) | compound | "Always Allow" never matches compound commands with pipes/quotes |
 | [#29085](https://github.com/anthropics/claude-code/issues/29085) | design | "Permission rules model needs fundamental rethink" |
 | [#16561](https://github.com/anthropics/claude-code/issues/16561) | feature | Parse compound commands, match each component individually |
 
@@ -48,6 +51,24 @@ This is a widely reported problem with many open issues on [anthropics/claude-co
 
 - [claude-code-plus](https://github.com/AbdelrahmanHafez/claude-code-plus) — PreToolUse hook using `shfmt` to parse pipes and match each component
 - [claude-code-permissions-hook](https://github.com/kornysietsma/claude-code-permissions-hook) — Rust/TOML regex-based allow/deny rules
+
+## Shell loop fragments stored as permissions
+
+When "Always allow" is used on a multi-line bash loop (e.g., `for ... ; do echo ... ; done`), Claude Code splits the command by lines and stores each fragment as a separate permission entry.
+
+**Example entries saved to `settings.local.json`:**
+```json
+"Bash(do echo \"=== Ralph Loop #$i ===\")",
+"Bash(do grep \"pattern\" file)",
+"Bash(do git mv \"$dir\" target/)",
+"Bash(do)"
+```
+
+These are not valid commands — `do` is a shell keyword, not a command.
+
+**Upstream:** [#16481](https://github.com/anthropics/claude-code/issues/16481) (closed as duplicate), [#11932](https://github.com/anthropics/claude-code/issues/11932) (open)
+
+**ccperm handling:** `extractCmd` skips shell keywords (`do`, `then`, `else`, `fi`, `for`, `while`, etc.) and extracts the real command that follows. So `do echo \` is recognized as `echo` (LOW), `do grep \` as `grep` (LOW).
 
 ## Global permissions aren't checked on project approval
 

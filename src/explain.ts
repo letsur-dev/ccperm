@@ -238,13 +238,24 @@ const TOOL_DESCRIPTIONS: Record<string, [string, Severity]> = {
   'WebSearch': ['Web search', 'low'],
 };
 
+// Shell keywords that are not real commands — skip to find the actual command
+const SHELL_KEYWORDS = new Set([
+  'do', 'done', 'then', 'else', 'elif', 'fi', 'for', 'while', 'until',
+  'if', 'case', 'esac', 'in', 'select',
+]);
+
 // Extract first command word from a bash label
 function extractCmd(label: string): string {
   const clean = label
     .replace(/__NEW_LINE_[a-f0-9]+__\s*/, '')
     .replace(/[:]\*.*$/, '')
     .replace(/\s\*.*$/, '');
-  return clean.split(/[\s(]/)[0];
+  const words = clean.split(/[\s(]/);
+  // Skip shell keywords to find the real command
+  for (const w of words) {
+    if (w && !SHELL_KEYWORDS.has(w)) return w;
+  }
+  return words[0];
 }
 
 export function explainBash(label: string): PermInfo {
