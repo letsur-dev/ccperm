@@ -86,7 +86,11 @@ function boxBottom(hint: string, width: number): string {
 }
 
 function boxBottom2(line1: string, line2: string, width: number): string {
-  return boxLine(line1, width) + '\n' + boxBottom(line2, width);
+  const inner = width - 2;
+  const hintPart = ` ${line1} `;
+  const fill = Math.max(0, inner - visLen(hintPart));
+  const top = `${DIM}│${NC}${' '.repeat(fill)}${hintPart}${DIM}│${NC}`;
+  return top + '\n' + boxBottom(line2, width);
 }
 
 function boxSep(width: number): string {
@@ -450,14 +454,12 @@ function renderList(state: TuiState, withPerms: FileEntry[], emptyCount: number,
   if (hasRisk) legendParts.push(`${RED}!${NC} risk`);
   if (hasDep) legendParts.push(`${DIM}†${NC} deprecated`);
   if (hasDup) legendParts.push(`${YELLOW}G${NC} in global`);
+  const hint = '[↑↓] navigate  [Enter] detail  [/] search  [q] quit';
   if (legendParts.length > 0) {
     const legendStr = legendParts.join('  ');
-    const legendVisLen = visLen(legendStr);
-    const padLeft = Math.max(0, w - 4 - legendVisLen);
-    lines.push(boxLine(`${' '.repeat(padLeft)}${legendStr}`, w));
-    lines.push(boxBottom('[↑↓] navigate  [Enter] detail  [/] search  [q] quit', w));
+    lines.push(boxBottom2(legendStr, hint, w));
   } else {
-    lines.push(boxBottom('[↑↓] navigate  [Enter] detail  [/] search  [q] quit', w));
+    lines.push(boxBottom(hint, w));
   }
 
   process.stdout.write(lines.join('\n') + '\n');
