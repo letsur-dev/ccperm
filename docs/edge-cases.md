@@ -2,16 +2,19 @@
 
 Known quirks in Claude Code's permission system that affect how permissions work in practice.
 
-## Glob `*` doesn't match newlines
+## Glob `*` doesn't match special characters
 
-The `*` in permission patterns (e.g., `Bash(git commit *)`) does **not** match newline characters.
+The `*` in permission patterns (e.g., `Bash(curl *)`) does **not** match newlines, pipes, or shell operators. The entire compound command is matched as a single string against the pattern.
 
-**Impact:**
-- HEREDOC multi-line commands: `git commit -m "$(cat <<'EOF'\n...\nEOF\n)"` won't match `git commit *`
-- `&&` chained commands: `git add X && git commit Y` won't match `git add *` or `git commit *`
-- Users who use these patterns will be prompted every time, even with the permission allowed
+**Fails to match:**
+- **Pipes:** `curl ... | python3 ...` won't match `curl *`
+- **Chaining:** `git add X && git commit Y` won't match `git add *` or `git commit *`
+- **HEREDOC:** `git commit -m "$(cat <<'EOF'\n...\nEOF\n)"` won't match `git commit *`
+- **Redirects:** `echo foo 2>/dev/null | head` may not match `echo *`
 
-**Workaround:** Use single-line commands where possible.
+**Result:** Users get prompted every time, even with the permission already allowed.
+
+**Workaround:** Use single, non-piped commands where possible. Split compound commands into separate calls.
 
 ## Global permissions aren't checked on project approval
 
