@@ -1,7 +1,7 @@
 import readline from 'node:readline';
 import { RED, GREEN, YELLOW, CYAN, DIM, BOLD, NC } from './colors.js';
 import { FileEntry } from './aggregator.js';
-import { ScanResult, scanFile, removePerm, addPermToGlobal } from './scanner.js';
+import { ScanResult, scanFile, removePerm, addPermToGlobal, findDuplicates } from './scanner.js';
 import { explain, Severity } from './explain.js';
 
 function severityTag(s: Severity): string {
@@ -27,8 +27,17 @@ function cleanLabel(label: string): string {
   return s;
 }
 
+interface SearchHit {
+  projectName: string;
+  projectIdx: number;
+  perm: string;
+  rawPerm: string;
+  filePath: string;
+  isHeader: boolean;
+}
+
 interface TuiState {
-  view: 'list' | 'detail';
+  view: 'list' | 'detail' | 'search';
   cursor: number;
   scrollOffset: number;
   selectedProject: number;
@@ -39,6 +48,8 @@ interface TuiState {
   confirmDelete?: { perm: string; rawPerm: string; filePath: string };
   confirmGlobal?: { perm: string; rawPerm: string };
   flash?: string;
+  searchActive: boolean;
+  searchQuery: string;
 }
 
 // strip ANSI escape codes for visible length
@@ -54,9 +65,16 @@ function boxLine(text: string, width: number): string {
 
 function boxTop(title: string, info: string, width: number): string {
   const inner = width - 2;
-  const titlePart = ` ${title} `;
   const infoPart = info ? ` ${info} ` : '';
-  const fill = Math.max(0, inner - titlePart.length - infoPart.length);
+  const maxTitle = inner - infoPart.length - 2; // 2 for spaces around title
+  let truncTitle = title;
+  if (visLen(truncTitle) > maxTitle) {
+    // strip ANSI, truncate, re-wrap won't work cleanly — truncate the raw string
+    const plain = truncTitle.replace(/\x1b\[[0-9;]*m/g, '');
+    truncTitle = plain.slice(0, maxTitle - 1) + '…';
+  }
+  const titlePart = ` ${truncTitle} `;
+  const fill = Math.max(0, inner - visLen(titlePart) - infoPart.length);
   return `${DIM}┌${titlePart}${'─'.repeat(fill)}${infoPart}┐${NC}`;
 }
 
@@ -67,8 +85,45 @@ function boxBottom(hint: string, width: number): string {
   return `${DIM}└${'─'.repeat(fill)}${hintPart}┘${NC}`;
 }
 
+function boxBottom2(line1: string, line2: string, width: number): string {
+  return boxLine(line1, width) + '\n' + boxBottom(line2, width);
+}
+
 function boxSep(width: number): string {
   return `${DIM}├${'─'.repeat(width - 2)}┤${NC}`;
+}
+
+
+function refreshProject(results: ScanResult[], withPerms: FileEntry[], idx: number, filePath: string): void {
+  const ri = results.findIndex((r) => r.path === filePath);
+  if (ri >= 0) {
+    const updated = scanFile(filePath);
+    if (updated) {
+      results[ri] = updated;
+      const entry = withPerms[idx];
+      entry.totalCount = updated.totalCount;
+      entry.groups = new Map();
+      for (const g of updated.groups) entry.groups.set(g.category, g.items.length);
+    }
+  }
+}
+
+function buildDupMap(results: ScanResult[]): Map<string, { exact: number; global: number }> {
+  const globalResult = results.find((r) => r.isGlobal);
+  const globalPerms = globalResult ? globalResult.permissions : [];
+  const map = new Map<string, { exact: number; global: number }>();
+  for (const r of results) {
+    if (r.isGlobal) continue;
+    const dup = findDuplicates(r.path, globalPerms);
+    const total = dup.exact.length + dup.globalDup.length;
+    if (total > 0) map.set(r.display, { exact: dup.exact.length, global: dup.globalDup.length });
+  }
+  return map;
+}
+
+function getGlobalPerms(results: ScanResult[]): string[] {
+  const globalResult = results.find((r) => r.isGlobal);
+  return globalResult ? globalResult.permissions : [];
 }
 
 export function startInteractive(
@@ -82,6 +137,7 @@ export function startInteractive(
     const emptyCount = merged.filter((r) => r.totalCount === 0 && !r.isGlobal).length;
     const riskMap = buildRiskMap(results);
     const depMap = buildDeprecatedMap(results);
+    let dupMap = buildDupMap(results);
 
     if (withPerms.length === 0) {
       console.log(`\n  ${GREEN}No projects with permissions found.${NC}\n`);
@@ -89,7 +145,7 @@ export function startInteractive(
       return;
     }
 
-    const state: TuiState = { view: 'list', cursor: 0, scrollOffset: 0, selectedProject: 0, detailCursor: 0, detailScroll: 0, expanded: new Set(), showInfo: false };
+    const state: TuiState = { view: 'list', cursor: 0, scrollOffset: 0, selectedProject: 0, detailCursor: 0, detailScroll: 0, expanded: new Set(), showInfo: false, searchActive: false, searchQuery: '' };
 
     readline.emitKeypressEvents(process.stdin);
     if (process.stdin.isTTY) process.stdin.setRawMode(true);
@@ -107,15 +163,71 @@ export function startInteractive(
     process.on('SIGINT', onSigint);
 
     const render = () => {
-      process.stdout.write('\x1b[2J\x1b[H\x1b[?25l');
-      if (state.view === 'list') renderList(state, withPerms, emptyCount, riskMap, depMap);
-      else renderDetail(state, withPerms, results);
+      process.stdout.write('\x1b[2J\x1b[H');
+      process.stdout.write(state.searchActive ? '\x1b[?25h' : '\x1b[?25l');
+      if (state.view === 'search') renderSearch(state, withPerms, results);
+      else if (state.view === 'list') renderList(state, withPerms, emptyCount, riskMap, depMap, dupMap);
+      else renderDetail(state, withPerms, results, dupMap);
     };
 
     const onKey = (_str: string | undefined, key: readline.Key) => {
       if (!key) return;
 
+      // Search typing mode (active in search view)
+      if (state.searchActive) {
+        if (key.name === 'escape') {
+          state.searchActive = false;
+          state.searchQuery = '';
+          state.view = 'list';
+          state.cursor = 0;
+          state.scrollOffset = 0;
+        } else if (key.name === 'return') {
+          // Navigate to selected hit's project
+          const hits = buildSearchHits(state.searchQuery, withPerms, results);
+          const hit = hits[state.cursor];
+          if (hit && !hit.isHeader) {
+            state.searchActive = false;
+            state.selectedProject = hit.projectIdx;
+            state.detailCursor = 0;
+            state.detailScroll = 0;
+            state.expanded = new Set();
+            state.searchQuery = '';
+            state.view = 'detail';
+          }
+        } else if (key.name === 'backspace') {
+          state.searchQuery = state.searchQuery.slice(0, -1);
+          state.cursor = 0;
+          state.scrollOffset = 0;
+        } else if (key.name === 'up' || key.name === 'down') {
+          const hits = buildSearchHits(state.searchQuery, withPerms, results);
+          if (key.name === 'up') {
+            do { state.cursor = Math.max(0, state.cursor - 1); }
+            while (state.cursor > 0 && hits[state.cursor]?.isHeader);
+          } else {
+            do { state.cursor = Math.min(hits.length - 1, state.cursor + 1); }
+            while (state.cursor < hits.length - 1 && hits[state.cursor]?.isHeader);
+          }
+        } else if (_str && _str.length === 1 && !key.ctrl && !key.meta) {
+          state.searchQuery += _str;
+          state.cursor = 0;
+          state.scrollOffset = 0;
+        }
+        render();
+        return;
+      }
+
       if (key.name === 'q' || (key.name === 'c' && key.ctrl)) { cleanup(); console.log(''); resolve(); return; }
+
+      // `/` activates search from list or search view
+      if (_str === '/' && (state.view === 'list' || state.view === 'search') && !state.confirmDelete && !state.confirmGlobal) {
+        state.searchActive = true;
+        state.searchQuery = '';
+        state.view = 'search';
+        state.cursor = 0;
+        state.scrollOffset = 0;
+        render();
+        return;
+      }
 
       if (state.view === 'list') {
         if (key.name === 'up') state.cursor = Math.max(0, state.cursor - 1);
@@ -127,22 +239,38 @@ export function startInteractive(
           state.expanded = new Set();
           state.view = 'detail';
         }
+      } else if (state.view === 'search') {
+        const hits = buildSearchHits(state.searchQuery, withPerms, results);
+        if (key.name === 'escape') {
+          state.view = 'list';
+          state.cursor = 0;
+          state.scrollOffset = 0;
+          state.searchQuery = '';
+        } else if (key.name === 'up') {
+          do { state.cursor = Math.max(0, state.cursor - 1); }
+          while (state.cursor > 0 && hits[state.cursor]?.isHeader);
+        } else if (key.name === 'down') {
+          do { state.cursor = Math.min(hits.length - 1, state.cursor + 1); }
+          while (state.cursor < hits.length - 1 && hits[state.cursor]?.isHeader);
+        } else if (key.name === 'return') {
+          const hit = hits[state.cursor];
+          if (hit && !hit.isHeader) {
+            state.selectedProject = hit.projectIdx;
+            state.detailCursor = 0;
+            state.detailScroll = 0;
+            state.expanded = new Set();
+            state.searchQuery = '';
+            state.view = 'detail';
+          }
+        }
       } else {
+        // detail view
         if (state.confirmDelete) {
           if (key.name === 'y') {
             const { rawPerm, filePath } = state.confirmDelete;
             if (removePerm(filePath, rawPerm)) {
-              const idx = results.findIndex((r) => r.path === filePath);
-              if (idx >= 0) {
-                const updated = scanFile(filePath);
-                if (updated) {
-                  results[idx] = updated;
-                  const entry = withPerms[state.selectedProject];
-                  entry.totalCount = updated.totalCount;
-                  entry.groups = new Map();
-                  for (const g of updated.groups) entry.groups.set(g.category, g.items.length);
-                }
-              }
+              refreshProject(results, withPerms, state.selectedProject, filePath);
+              dupMap = buildDupMap(results);
               state.flash = `${GREEN}✔ Deleted${NC}`;
             }
             state.confirmDelete = undefined;
@@ -152,7 +280,14 @@ export function startInteractive(
         } else if (state.confirmGlobal) {
           if (key.name === 'y') {
             if (addPermToGlobal(state.confirmGlobal.rawPerm)) {
-              state.flash = `${GREEN}✔ Copied to global${NC}`;
+              // Refresh global scan result so dupMap picks up new global perm
+              const globalIdx = results.findIndex((r) => r.isGlobal);
+              if (globalIdx >= 0) {
+                const updated = scanFile(results[globalIdx].path);
+                if (updated) results[globalIdx] = updated;
+              }
+              dupMap = buildDupMap(results);
+              state.flash = `${GREEN}✔ Added to global${NC}`;
             } else {
               state.flash = `${DIM}· Already in global${NC}`;
             }
@@ -162,6 +297,7 @@ export function startInteractive(
           state.view = 'list';
           state.detailCursor = 0;
           state.detailScroll = 0;
+          state.searchQuery = '';
         } else if (key.name === 'up') {
           state.detailCursor = Math.max(0, state.detailCursor - 1);
         } else if (key.name === 'down') {
@@ -174,6 +310,12 @@ export function startInteractive(
           (state as any)._delete = true;
         } else if (key.name === 'g') {
           (state as any)._global = true;
+        } else if (_str === '/' && !state.confirmDelete && !state.confirmGlobal) {
+          state.searchActive = true;
+          state.searchQuery = '';
+          state.view = 'search';
+          state.cursor = 0;
+          state.scrollOffset = 0;
         }
       }
 
@@ -213,7 +355,7 @@ function buildRiskMap(results: ScanResult[]): Map<string, { critical: number; hi
   return map;
 }
 
-function renderList(state: TuiState, withPerms: FileEntry[], emptyCount: number, riskMap: Map<string, { critical: number; high: number }>, depMap: Map<string, number>): void {
+function renderList(state: TuiState, withPerms: FileEntry[], emptyCount: number, riskMap: Map<string, { critical: number; high: number }>, depMap: Map<string, number>, dupMap: Map<string, { exact: number; global: number }>): void {
   const rows = process.stdout.rows || 24;
   const cols = process.stdout.columns || 80;
 
@@ -222,21 +364,21 @@ function renderList(state: TuiState, withPerms: FileEntry[], emptyCount: number,
 
   const hasRisk = [...riskMap.values()].some((v) => v.critical > 0 || v.high > 0);
   const hasDep = depMap.size > 0;
+  const hasDup = dupMap.size > 0;
   const riskColWidth = hasRisk ? 3 : 0;
   const depColWidth = hasDep ? 3 : 0;
+  const dupColWidth = hasDup ? 4 : 0;
   const catColWidth = catsPresent.length * 7;
   const typeColWidth = 7;
   const maxName = Math.max(...withPerms.map((r) => r.shortName.length), 7);
   const nameColWidth = Math.min(maxName + typeColWidth, 35);
   const nameWidth = nameColWidth - typeColWidth;
-  // content: marker(2) + nameCol + gap(2) + catCols + gap(2) + total(5) + riskCol(3) + depCol(3)
-  const contentWidth = 2 + nameColWidth + 2 + catColWidth + 2 + 5 + (hasRisk ? riskColWidth : 0) + (hasDep ? depColWidth : 0);
+  const contentWidth = 2 + nameColWidth + 2 + catColWidth + 2 + 5 + (hasRisk ? riskColWidth : 0) + (hasDep ? depColWidth : 0) + (hasDup ? dupColWidth : 0);
   const w = Math.min(cols, contentWidth + 4);
-  const inner = w - 4;
 
   const hasGlobalSep = withPerms.some((r) => r.isGlobal) && withPerms.some((r) => !r.isGlobal);
-  // box takes: top(1) + header(2) + sep(1) + content + globalSep?(1) + emptyLine?(1) + bottom(1)
-  const chrome = 5 + (hasGlobalSep ? 1 : 0) + (emptyCount > 0 ? 1 : 0);
+  const hasLegend = hasRisk || hasDep || hasDup;
+  const chrome = 5 + (hasGlobalSep ? 1 : 0) + (emptyCount > 0 ? 1 : 0) + (hasLegend ? 1 : 0);
   const visibleRows = Math.min(25, Math.max(1, rows - chrome));
 
   if (state.cursor < state.scrollOffset) state.scrollOffset = state.cursor;
@@ -248,10 +390,10 @@ function renderList(state: TuiState, withPerms: FileEntry[], emptyCount: number,
   lines.push(boxTop('ccperm', scrollInfo, w));
   const riskHeader = hasRisk ? ` ${rpad('!', 2)}` : '';
   const depHeader = hasDep ? ` ${rpad('†', 2)}` : '';
-  lines.push(boxLine(`${DIM}  ${pad('PROJECT', nameColWidth)}  ${catsPresent.map((c) => rpad(c, 5)).join('  ')}  ${rpad('TOTAL', 5)}${riskHeader}${depHeader}${NC}`, w));
+  const dupHeader = hasDup ? ` ${rpad('G', 3)}` : '';
+  lines.push(boxLine(`${DIM}  ${pad('PROJECT', nameColWidth)}  ${catsPresent.map((c) => rpad(c, 5)).join('  ')}  ${rpad('TOTAL', 5)}${riskHeader}${depHeader}${dupHeader}${NC}`, w));
   lines.push(boxSep(w));
 
-  const globalCount = withPerms.filter((r) => r.isGlobal).length;
   const end = Math.min(state.scrollOffset + visibleRows, withPerms.length);
   for (let i = state.scrollOffset; i < end; i++) {
     const r = withPerms[i];
@@ -283,7 +425,16 @@ function renderList(state: TuiState, withPerms: FileEntry[], emptyCount: number,
       if (dep > 0) depCol = ` ${DIM}${rpad(dep, 2)}${NC}`;
       else depCol = ` ${DIM}${rpad('·', 2)}${NC}`;
     }
-    lines.push(boxLine(`${nameCol}  ${catCols}  ${totalCol}${riskCol}${depCol}`, w));
+    let dupCol = '';
+    if (hasDup) {
+      const dup = dupMap.get(r.display);
+      if (dup && dup.global > 0) {
+        dupCol = ` ${YELLOW}${rpad(dup.global, 3)}${NC}`;
+      } else {
+        dupCol = ` ${DIM}${rpad('·', 3)}${NC}`;
+      }
+    }
+    lines.push(boxLine(`${nameCol}  ${catCols}  ${totalCol}${riskCol}${depCol}${dupCol}`, w));
 
     // separator after global section
     if (r.isGlobal && i + 1 < withPerms.length && !withPerms[i + 1].isGlobal) {
@@ -295,12 +446,91 @@ function renderList(state: TuiState, withPerms: FileEntry[], emptyCount: number,
     lines.push(boxLine(`${DIM}+ ${emptyCount} projects with no permissions${NC}`, w));
   }
 
-  lines.push(boxBottom('[↑↓] navigate  [Enter] detail  [q] quit', w));
+  const legendParts: string[] = [];
+  if (hasRisk) legendParts.push(`${RED}!${NC} risk`);
+  if (hasDep) legendParts.push(`${DIM}†${NC} deprecated`);
+  if (hasDup) legendParts.push(`${YELLOW}G${NC} in global`);
+  if (legendParts.length > 0) {
+    const legendStr = legendParts.join('  ');
+    const legendVisLen = visLen(legendStr);
+    const padLeft = Math.max(0, w - 4 - legendVisLen);
+    lines.push(boxLine(`${' '.repeat(padLeft)}${legendStr}`, w));
+    lines.push(boxBottom('[↑↓] navigate  [Enter] detail  [/] search  [q] quit', w));
+  } else {
+    lines.push(boxBottom('[↑↓] navigate  [Enter] detail  [/] search  [q] quit', w));
+  }
 
   process.stdout.write(lines.join('\n') + '\n');
 }
 
-function renderDetail(state: TuiState, withPerms: FileEntry[], results: ScanResult[]): void {
+function buildSearchHits(query: string, withPerms: FileEntry[], results: ScanResult[]): SearchHit[] {
+  if (!query) return [];
+  const q = query.toLowerCase();
+  const hits: SearchHit[] = [];
+  for (let pi = 0; pi < withPerms.length; pi++) {
+    const entry = withPerms[pi];
+    const r = results.find((r) => r.display === entry.display);
+    if (!r) continue;
+    const matched = r.permissions.filter((p) => p.toLowerCase().includes(q));
+    if (matched.length === 0) continue;
+    hits.push({ projectName: entry.shortName, projectIdx: pi, perm: '', rawPerm: '', filePath: r.path, isHeader: true });
+    for (const p of matched) {
+      hits.push({ projectName: entry.shortName, projectIdx: pi, perm: p, rawPerm: p, filePath: r.path, isHeader: false });
+    }
+  }
+  return hits;
+}
+
+function renderSearch(state: TuiState, withPerms: FileEntry[], results: ScanResult[]): void {
+  const rows = process.stdout.rows || 24;
+  const cols = process.stdout.columns || 80;
+  const w = Math.min(cols, 82);
+
+  const hits = buildSearchHits(state.searchQuery, withPerms, results);
+  const permCount = hits.filter((h) => !h.isHeader).length;
+  if (state.cursor >= hits.length) state.cursor = Math.max(0, hits.length - 1);
+  // Skip header rows when navigating
+  if (hits[state.cursor]?.isHeader && state.cursor + 1 < hits.length) state.cursor++;
+
+  const chrome = 3; // top + bottom + search bar
+  const visibleRows = Math.max(1, rows - chrome);
+  if (state.cursor < state.scrollOffset) state.scrollOffset = state.cursor;
+  if (state.cursor >= state.scrollOffset + visibleRows) state.scrollOffset = state.cursor - visibleRows + 1;
+
+  const lines: string[] = [];
+  const scrollInfo = hits.length > visibleRows ? `${state.cursor + 1}/${hits.length}` : '';
+  lines.push(boxTop(`search: ${state.searchQuery}  ${permCount} permissions`, scrollInfo, w));
+
+  const end = Math.min(state.scrollOffset + visibleRows, hits.length);
+  for (let i = state.scrollOffset; i < end; i++) {
+    const hit = hits[i];
+    const isCursor = i === state.cursor;
+    if (hit.isHeader) {
+      const tag = withPerms[hit.projectIdx]?.isGlobal ? 'global' : withPerms[hit.projectIdx]?.fileType || '';
+      lines.push(boxLine(`${YELLOW}  ${hit.projectName}${NC} ${DIM}${tag}${NC}`, w));
+    } else {
+      const prefix = isCursor ? `${CYAN}▸ ` : '  ';
+      const clean = cleanLabel(hit.perm);
+      const maxLen = w - 8;
+      const name = clean.length > maxLen ? clean.slice(0, maxLen - 1) + '…' : clean;
+      lines.push(boxLine(`${prefix}  ${DIM}${name}${NC}`, w));
+    }
+  }
+
+  if (hits.length === 0 && state.searchQuery) {
+    lines.push(boxLine(`${DIM}  No matches${NC}`, w));
+  }
+
+  if (state.searchActive) {
+    lines.push(boxBottom(`/ ${state.searchQuery}█ (${permCount} matches)`, w));
+  } else {
+    lines.push(boxBottom(`[↑↓] navigate  [Enter] go to project  [/] new search  [Esc] back`, w));
+  }
+
+  process.stdout.write(lines.join('\n') + '\n');
+}
+
+function renderDetail(state: TuiState, withPerms: FileEntry[], results: ScanResult[], dupMap: Map<string, { exact: number; global: number }>): void {
   const rows = process.stdout.rows || 24;
   const cols = process.stdout.columns || 80;
   const w = Math.min(cols, 82);
@@ -310,34 +540,48 @@ function renderDetail(state: TuiState, withPerms: FileEntry[], results: ScanResu
   const fileResult = results.find((r) => r.display === project.display);
   if (!fileResult || fileResult.totalCount === 0) return;
 
+  // Compute dup info for this file
+  const globalPerms = getGlobalPerms(results);
+  const dupInfo = project.isGlobal ? { exact: [], globalDup: [] } : findDuplicates(fileResult.path, globalPerms);
+  const exactSet = new Set(dupInfo.exact);
+  const globalDupSet = new Set(dupInfo.globalDup);
+
   // build navigable rows
-  const navRows: { text: string; key?: string; perm?: string; rawPerm?: string }[] = [];
+  const allNavRows: { text: string; key?: string; perm?: string; rawPerm?: string }[] = [];
   for (const group of fileResult.groups) {
     const key = `${fileResult.path}:${group.category}`;
     const isOpen = state.expanded.has(key);
     const arrow = isOpen ? '▾' : '▸';
-    navRows.push({ text: `${YELLOW}${arrow} ${group.category}${NC} ${DIM}(${group.items.length})${NC}`, key });
+    allNavRows.push({ text: `${YELLOW}${arrow} ${group.category}${NC} ${DIM}(${group.items.length})${NC}`, key });
     if (isOpen) {
       for (const item of group.items) {
         const clean = cleanLabel(item.name);
-        // Find the raw permission string from the original permissions array
         const rawPerm = fileResult.permissions.find((p) => p.includes(item.name)) || '';
+
+        // Dup tag
+        let dupTag = '';
+        if (globalDupSet.has(rawPerm)) dupTag = ` ${YELLOW}(in global)${NC}`;
+        else if (exactSet.has(rawPerm)) dupTag = ` ${DIM}(dup)${NC}`;
+
         if (state.showInfo) {
           const info = explain(group.category, item.name);
           const tag = severityTag(info.risk);
-          const tagLen = info.risk.length + 2; // tag visual width (e.g. "CRITICAL" + 2 spaces)
+          const tagLen = info.risk.length + 2;
           const nameMax = Math.min(30, w - tagLen - 14);
           const name = clean.length > nameMax ? clean.slice(0, nameMax - 1) + '…' : clean;
           const desc = info.description ? `${DIM}${info.description}${NC}` : '';
-          navRows.push({ text: `  ${pad(name, nameMax)} ${tag} ${desc}`, perm: item.name, rawPerm });
+          allNavRows.push({ text: `  ${pad(name, nameMax)} ${tag} ${desc}${dupTag}`, perm: item.name, rawPerm });
         } else {
-          const maxLen = w - 8;
+          const dupTagVis = dupTag ? 10 : 0; // reserve space for tag
+          const maxLen = w - 8 - dupTagVis;
           const name = clean.length > maxLen ? clean.slice(0, maxLen - 1) + '…' : clean;
-          navRows.push({ text: `  ${DIM}${name}${NC}`, perm: item.name, rawPerm });
+          allNavRows.push({ text: `  ${DIM}${name}${NC}${dupTag}`, perm: item.name, rawPerm });
         }
       }
     }
   }
+
+  const navRows = allNavRows;
 
   // handle toggle
   if ((state as any)._toggle) {
@@ -346,7 +590,7 @@ function renderDetail(state: TuiState, withPerms: FileEntry[], results: ScanResu
     if (row?.key) {
       if (state.expanded.has(row.key)) state.expanded.delete(row.key);
       else state.expanded.add(row.key);
-      renderDetail(state, withPerms, results);
+      renderDetail(state, withPerms, results, dupMap);
       return;
     }
   }
@@ -371,8 +615,9 @@ function renderDetail(state: TuiState, withPerms: FileEntry[], results: ScanResu
 
   if (state.detailCursor >= navRows.length) state.detailCursor = Math.max(0, navRows.length - 1);
 
-  // box chrome: top(1) + sep(1) + bottom(1) = 3
-  const visibleRows = Math.max(1, rows - 3);
+  // top(1) + bottom(2 for hint, or 1 for flash/confirm/search)
+  const bottomChrome = (!state.flash && !state.confirmDelete && !state.confirmGlobal && !state.searchActive) ? 4 : 3;
+  const visibleRows = Math.max(1, rows - bottomChrome);
   if (state.detailCursor < state.detailScroll) state.detailScroll = state.detailCursor;
   if (state.detailCursor >= state.detailScroll + visibleRows) state.detailScroll = state.detailCursor - visibleRows + 1;
 
@@ -381,7 +626,10 @@ function renderDetail(state: TuiState, withPerms: FileEntry[], results: ScanResu
   const scrollInfo = navRows.length > visibleRows ? `${state.detailCursor + 1}/${navRows.length}` : '';
   const lines: string[] = [];
   const typeTag = project.fileType === 'global' ? 'global' : project.fileType;
-  lines.push(boxTop(`${project.shortName} (${typeTag})  ${project.totalCount} permissions`, scrollInfo, w));
+  const dupCount = dupMap.get(project.display);
+  const globalCount = dupCount?.global || 0;
+  const dupSuffix = globalCount > 0 ? `  ${YELLOW}${globalCount} in global${NC}` : '';
+  lines.push(boxTop(`${project.shortName} (${typeTag})  ${project.totalCount} permissions${dupSuffix}`, scrollInfo, w));
 
   for (let i = 0; i < visible.length; i++) {
     const globalIdx = state.detailScroll + i;
@@ -402,10 +650,16 @@ function renderDetail(state: TuiState, withPerms: FileEntry[], results: ScanResu
     const name = cleanLabel(state.confirmGlobal.perm);
     const truncName = name.length > 30 ? name.slice(0, 29) + '…' : name;
     lines.push(boxBottom(`${CYAN}Copy "${truncName}" to global? [y/N]${NC}`, w));
+  } else if (state.searchActive) {
+    lines.push(boxBottom(`/ ${state.searchQuery}█ (${navRows.length} matches)`, w));
   } else {
     const infoHint = state.showInfo ? '[i] hide info' : '[i] info';
-    const globalHint = project.isGlobal ? '' : '  [g] global';
-    lines.push(boxBottom(`[↑↓] navigate  [Enter] expand  ${infoHint}  [d] delete${globalHint}  [Esc] back  [q] quit`, w));
+    const globalHint = project.isGlobal ? '' : '  [g] +global';
+    lines.push(boxBottom2(
+      `${DIM}[↑↓] navigate  [Enter] expand  ${infoHint}  [d] delete${globalHint}${NC}`,
+      `[/] search  [Esc] back  [q] quit`,
+      w,
+    ));
   }
 
   process.stdout.write(lines.join('\n') + '\n');
