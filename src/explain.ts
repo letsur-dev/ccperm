@@ -68,6 +68,13 @@ const BASH_COMMANDS: Record<string, [string, Severity, string]> = {
   // networking
   'curl': ['HTTP requests', 'medium', 'networking'],
   'wget': ['Download files', 'medium', 'networking'],
+  'ss': ['Socket statistics', 'low', 'networking'],
+  'netstat': ['Network statistics', 'low', 'networking'],
+  'ip': ['Network config', 'low', 'networking'],
+  'ping': ['Network connectivity test', 'low', 'networking'],
+  'dig': ['DNS lookup', 'low', 'networking'],
+  'nslookup': ['DNS lookup', 'low', 'networking'],
+  'traceroute': ['Trace network route', 'low', 'networking'],
   'tailscale': ['Tailscale VPN', 'medium', 'networking'],
   'cloudflared': ['Cloudflare tunnel', 'medium', 'networking'],
 
