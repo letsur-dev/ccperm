@@ -63,6 +63,33 @@ export function addPermToGlobal(rawPerm: string): boolean {
   return true;
 }
 
+export interface DupInfo {
+  exact: string[];   // duplicated within same file
+  globalDup: string[]; // redundant with global
+}
+
+export function findDuplicates(filePath: string, globalPerms: string[]): DupInfo {
+  let content: string;
+  try { content = fs.readFileSync(filePath, 'utf8'); } catch { return { exact: [], globalDup: [] }; }
+  let json: any;
+  try { json = JSON.parse(content); } catch { return { exact: [], globalDup: [] }; }
+  const allow: string[] = json?.permissions?.allow;
+  if (!Array.isArray(allow)) return { exact: [], globalDup: [] };
+
+  const exact: string[] = [];
+  const seen = new Set<string>();
+  for (const p of allow) {
+    if (seen.has(p)) { if (!exact.includes(p)) exact.push(p); }
+    else seen.add(p);
+  }
+
+  const globalSet = new Set(globalPerms);
+  const globalDup = [...new Set(allow)].filter((p) => globalSet.has(p));
+
+  return { exact, globalDup };
+}
+
+
 export function countDeprecated(results: ScanResult[]): { path: string; count: number }[] {
   const out: { path: string; count: number }[] = [];
   for (const r of results) {
