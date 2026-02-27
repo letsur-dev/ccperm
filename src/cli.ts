@@ -86,9 +86,13 @@ async function main() {
 
   if (spinner) { clearInterval(spinner); process.stdout.write('\r\x1b[K'); }
   if (files.length === 0) { console.log(`  ${GREEN}✔ No settings files found.${NC}\n`); return; }
-  console.log(`  ${GREEN}✔${NC} Found ${CYAN}${files.length}${NC} settings files\n`);
 
-  const results: ScanResult[] = files.map(scanFile).filter((r): r is ScanResult => r !== null);
+  const results0: ScanResult[] = files.map(scanFile).filter((r): r is ScanResult => r !== null);
+  const totalPerms = results0.reduce((sum, r) => sum + r.totalCount, 0);
+  const projects = new Set(results0.map(r => r.display.replace(/\/\.claude\/.*$/, ''))).size;
+  console.log(`  ${GREEN}✔${NC} Found ${CYAN}${files.length}${NC} settings files · ${CYAN}${projects}${NC} projects · ${CYAN}${totalPerms}${NC} permissions\n`);
+
+  const results = results0;
 
   if (args.includes('--hey-claude-witness-me')) {
     console.log(analyze(results));
