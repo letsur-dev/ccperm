@@ -41,24 +41,29 @@ By default, ccperm scans all projects under `~` and launches an interactive TUI.
 
 When running in a TTY (the default), ccperm opens a box-frame TUI:
 
-**List view** — Projects sorted by permission count. Columns: Bash, MCP, Tools, TOTAL, `!` (risk warnings), `†` (deprecated `:*` patterns).
+**List view** — Projects sorted by permission count. Columns: Bash, MCP, Tools, TOTAL, `!` (risk), `†` (deprecated `:*`), `G` (redundant with global).
 
 ```
-┌ ccperm ──────────────────────────── 1/8 ┐
-│   PROJECT         Bash MCP Tools TOTAL  │
-├─────────────────────────────────────────┤
-│   ~/.claude                  2      2   │
-├─────────────────────────────────────────┤
-│ ▸ my-project  local  5   ·    3    8    │
-│   other-app   shared 2   3    ·    5    │
-└ [↑↓] navigate  [Enter] detail  [q] quit┘
+┌ ccperm ──────────────────────────────── 1/8 ┐
+│   PROJECT              Bash MCP Tools TOTAL G│
+├─────────────────────────────────────────────┤
+│   ~/.claude               15   ·    2    17 ·│
+├─────────────────────────────────────────────┤
+│ ▸ my-project  local  5   ·    3    8    3   │
+│   other-app   shared 2   3    ·    5    ·   │
+│                          ! risk  † deprecated  G in global │
+└──────── [↑↓] navigate  [Enter] detail  [/] search  [q] quit┘
 ```
 
-**Detail view** — Press Enter to expand a project. Categories are collapsible; press Enter to toggle. Press `[d]` to delete a permission, `[g]` to copy it to global settings.
+**Detail view** — Press Enter to expand a project. Categories are collapsible; press Enter to toggle.
+- `[d]` delete a permission
+- `[g]` add permission to global settings (shows `(in global)` tag immediately)
+- `[i]` toggle risk info mode
+- Permissions already in global are tagged `(in global)` in yellow
 
-**Info mode** — Press `[i]` to show risk level and description for each permission.
+**Search view** — Press `/` to search across all projects. Matches permission names and shows results grouped by project. Arrow keys navigate (headers are skipped), Enter jumps to the project's detail view.
 
-Keys: `↑↓` navigate, `Enter` select/expand, `[i]` info, `[d]` delete, `[g]` copy to global, `Esc` back, `q` quit.
+Keys: `↑↓` navigate, `Enter` select/expand, `[i]` info, `[d]` delete, `[g]` +global, `/` search, `Esc` back, `q` quit.
 
 ## Static Output
 
