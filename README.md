@@ -44,14 +44,14 @@ When running in a TTY (the default), ccperm opens a box-frame TUI:
 **List view** — Projects sorted by permission count. Columns: Bash, MCP, Tools, TOTAL, `!` (risk), `†` (deprecated `:*`), `G` (redundant with global).
 
 ```
-┌ ccperm ──────────────────────────────────────── 1/8 ┐
-│   PROJECT                 Bash  MCP  Tools  TOTAL   │
-├─────────────────────────────────────────────────────┤
-│   ~/.claude                 15    ·      2     17   │
-├─────────────────────────────────────────────────────┤
-│ ▸ my-project  local          5    ·      3      8   │
-│   other-app   shared         2    3      ·      5   │
-│               ! risk  † deprecated  G in global     │
+┌ ccperm ──────────────────────────────────────────── 1/8 ┐
+│   PROJECT                   Bash  MCP  Tools  TOTAL     │
+├─────────────────────────────────────────────────────────┤
+│   ~/.claude                   15    ·      2     17     │
+├─────────────────────────────────────────────────────────┤
+│ ▸ my-project  local            5    ·      3      8     │
+│   other-app   shared           2    3      ·      5     │
+│                       ! risk  † deprecated  G in global │
 └──── [↑↓] navigate  [Enter] detail  [/] search  [q] quit ┘
 ```
 

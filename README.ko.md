@@ -44,14 +44,14 @@ TTY 환경(기본)에서는 박스 프레임 TUI가 실행됩니다:
 **목록 뷰** — 프로젝트가 권한 수 기준으로 정렬됩니다. 컬럼: Bash, MCP, Tools, TOTAL, `!` (위험도), `†` (deprecated `:*`), `G` (글로벌과 중복).
 
 ```
-┌ ccperm ──────────────────────────────────────── 1/8 ┐
-│   PROJECT                 Bash  MCP  Tools  TOTAL   │
-├─────────────────────────────────────────────────────┤
-│   ~/.claude                 15    ·      2     17   │
-├─────────────────────────────────────────────────────┤
-│ ▸ my-project  local          5    ·      3      8   │
-│   other-app   shared         2    3      ·      5   │
-│               ! risk  † deprecated  G in global     │
+┌ ccperm ──────────────────────────────────────────── 1/8 ┐
+│   PROJECT                   Bash  MCP  Tools  TOTAL     │
+├─────────────────────────────────────────────────────────┤
+│   ~/.claude                   15    ·      2     17     │
+├─────────────────────────────────────────────────────────┤
+│ ▸ my-project  local            5    ·      3      8     │
+│   other-app   shared           2    3      ·      5     │
+│                       ! risk  † deprecated  G in global │
 └──── [↑↓] navigate  [Enter] detail  [/] search  [q] quit ┘
 ```
 
