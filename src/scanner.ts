@@ -16,6 +16,12 @@ export interface ScanResult {
   denyPermissions: string[];
   denyGroups: PermGroup[];
   denyCount: number;
+  askPermissions: string[];
+  askGroups: PermGroup[];
+  askCount: number;
+  allowedTools: string[];
+  deniedTools: string[];
+  additionalDirectories: string[];
   isGlobal: boolean;
 }
 
@@ -183,14 +189,21 @@ export function scanFile(filePath: string): ScanResult | null {
 
   const allowArr: string[] = Array.isArray(json?.permissions?.allow) ? json.permissions.allow : [];
   const denyArr: string[] = Array.isArray(json?.permissions?.deny) ? json.permissions.deny : [];
+  const askArr: string[] = Array.isArray(json?.permissions?.ask) ? json.permissions.ask : [];
 
   const perms = [...new Set(allowArr)].sort();
   const denyPerms = [...new Set(denyArr)].sort();
+  const askPerms = [...new Set(askArr)].sort();
 
   const groups = groupPermissions(perms);
   const denyGroups = groupPermissions(denyPerms);
+  const askGroups = groupPermissions(askPerms);
 
-  return { path: filePath, display, permissions: perms, groups, totalCount: perms.length, denyPermissions: denyPerms, denyGroups, denyCount: denyPerms.length, isGlobal };
+  const allowedTools: string[] = Array.isArray(json?.allowedTools) ? [...new Set(json.allowedTools as string[])].sort() : [];
+  const deniedTools: string[] = Array.isArray(json?.deniedTools) ? [...new Set(json.deniedTools as string[])].sort() : [];
+  const additionalDirectories: string[] = Array.isArray(json?.additionalDirectories) ? [...new Set(json.additionalDirectories as string[])].sort() : [];
+
+  return { path: filePath, display, permissions: perms, groups, totalCount: perms.length, denyPermissions: denyPerms, denyGroups, denyCount: denyPerms.length, askPermissions: askPerms, askGroups, askCount: askPerms.length, allowedTools, deniedTools, additionalDirectories, isGlobal };
 }
 
 function categorize(perm: string): { category: string; label: string } {

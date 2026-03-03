@@ -86,16 +86,29 @@ ccperm distinguishes three levels of Claude Code settings:
 
 Permissions are additive — global + shared + local are merged at runtime.
 
-## Allow vs Deny
+## Allow vs Deny vs Ask
 
-Claude Code settings support both `permissions.allow` and `permissions.deny`. ccperm separates them clearly:
+Claude Code settings support `permissions.allow`, `permissions.deny`, and `permissions.ask`. ccperm separates them clearly:
 
 - **Allow** permissions are shown in the main list and can be deleted (`[d]`) or copied to global (`[g]`)
 - **Deny** rules appear in a collapsible **Deny** section in detail view, tagged with `DENY` and dimmed
-- Deny rules **cannot be deleted or copied** — they are security guardrails (e.g. `Bash(rm -rf)`, `Write:.env*`)
-- `--verbose` output shows a separate Deny section per project
+- **Ask** rules appear in a collapsible **Ask** section — these are permissions that prompt for confirmation each time
+- Deny and Ask rules **cannot be deleted or copied** — they are intentional controls
+- `--verbose` output shows separate Deny and Ask sections per project
 - `--hey-claude-witness-me` lists deny rules under "Protected rules"
-- Allow counts never include deny rules
+- Allow counts never include deny or ask rules
+
+## Additional Settings
+
+ccperm also scans and displays these top-level settings when present:
+
+| Field | Description |
+|-------|-------------|
+| `allowedTools` | Tools explicitly allowed for use (e.g. `Bash`, `Read`, `Write`) |
+| `deniedTools` | Tools explicitly denied (e.g. `WebSearch`) |
+| `additionalDirectories` | Extra directories Claude Code can access beyond the project root |
+
+These appear as collapsible sections in the TUI detail view and in `--verbose` output. Like deny rules, they cannot be deleted or copied.
 
 ## Risk Classification
 

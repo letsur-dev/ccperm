@@ -86,16 +86,29 @@ ccperm은 Claude Code 설정을 세 단계로 구분합니다:
 
 권한은 합산 방식 — global + shared + local이 런타임에 병합됩니다.
 
-## Allow vs Deny
+## Allow vs Deny vs Ask
 
-Claude Code 설정은 `permissions.allow`와 `permissions.deny`를 모두 지원합니다. ccperm은 이를 명확히 분리합니다:
+Claude Code 설정은 `permissions.allow`, `permissions.deny`, `permissions.ask`를 모두 지원합니다. ccperm은 이를 명확히 분리합니다:
 
 - **Allow** 권한은 메인 목록에 표시되며, 삭제(`[d]`)나 글로벌 복사(`[g]`)가 가능합니다
 - **Deny** 룰은 상세 뷰에서 접이식 **Deny** 섹션에 `DENY` 태그와 함께 표시됩니다
-- Deny 룰은 **삭제/복사 불가** — 보안 가드레일입니다 (예: `Bash(rm -rf)`, `Write:.env*`)
-- `--verbose` 출력에서 프로젝트별 Deny 섹션이 분리 표시됩니다
+- **Ask** 룰은 접이식 **Ask** 섹션에 표시됩니다 — 매번 확인을 요청하는 권한입니다
+- Deny와 Ask 룰은 **삭제/복사 불가** — 의도적으로 설정한 제어 규칙입니다
+- `--verbose` 출력에서 프로젝트별 Deny, Ask 섹션이 분리 표시됩니다
 - `--hey-claude-witness-me`에서 deny 룰이 "Protected rules"로 나열됩니다
-- Allow 카운트에 deny 룰은 포함되지 않습니다
+- Allow 카운트에 deny, ask 룰은 포함되지 않습니다
+
+## 추가 설정
+
+ccperm은 다음 최상위 설정도 스캔하여 표시합니다:
+
+| 필드 | 설명 |
+|------|------|
+| `allowedTools` | 사용이 허용된 도구 (예: `Bash`, `Read`, `Write`) |
+| `deniedTools` | 사용이 차단된 도구 (예: `WebSearch`) |
+| `additionalDirectories` | 프로젝트 루트 외 Claude Code가 접근할 수 있는 추가 디렉토리 |
+
+TUI 상세 뷰에서 접이식 섹션으로, `--verbose` 출력에서 별도 섹션으로 표시됩니다. Deny 룰과 마찬가지로 삭제/복사가 불가합니다.
 
 ## 위험도 분류
 

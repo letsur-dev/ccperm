@@ -107,6 +107,7 @@ function refreshProject(results: ScanResult[], withPerms: FileEntry[], idx: numb
       const entry = withPerms[idx];
       entry.totalCount = updated.totalCount;
       entry.denyCount = updated.denyCount;
+      entry.askCount = updated.askCount;
       entry.groups = new Map();
       for (const g of updated.groups) entry.groups.set(g.category, g.items.length);
     }
@@ -598,6 +599,69 @@ function renderDetail(state: TuiState, withPerms: FileEntry[], results: ScanResu
           const name = clean.length > maxLen ? clean.slice(0, maxLen - 1) + '…' : clean;
           allNavRows.push({ text: `  ${DIM}DENY  ${name}${NC}`, isDeny: true });
         }
+      }
+    }
+  }
+
+  // Ask section
+  if (fileResult.askCount > 0) {
+    const askKey = `${fileResult.path}:__ask__`;
+    const askOpen = state.expanded.has(askKey);
+    const askArrow = askOpen ? '▾' : '▸';
+    allNavRows.push({ text: `${YELLOW}${askArrow} Ask${NC} ${DIM}(${fileResult.askCount})${NC}`, key: askKey, isDeny: true });
+    if (askOpen) {
+      for (const group of fileResult.askGroups) {
+        for (const item of group.items) {
+          const clean = cleanLabel(item.name);
+          const maxLen = w - 16;
+          const name = clean.length > maxLen ? clean.slice(0, maxLen - 1) + '…' : clean;
+          allNavRows.push({ text: `  ${DIM}ASK   ${name}${NC}`, isDeny: true });
+        }
+      }
+    }
+  }
+
+  // AllowedTools section
+  if (fileResult.allowedTools.length > 0) {
+    const atKey = `${fileResult.path}:__allowedTools__`;
+    const atOpen = state.expanded.has(atKey);
+    const atArrow = atOpen ? '▾' : '▸';
+    allNavRows.push({ text: `${CYAN}${atArrow} AllowedTools${NC} ${DIM}(${fileResult.allowedTools.length})${NC}`, key: atKey, isDeny: true });
+    if (atOpen) {
+      for (const t of fileResult.allowedTools) {
+        const maxLen = w - 10;
+        const name = t.length > maxLen ? t.slice(0, maxLen - 1) + '…' : t;
+        allNavRows.push({ text: `  ${DIM}${name}${NC}`, isDeny: true });
+      }
+    }
+  }
+
+  // DeniedTools section
+  if (fileResult.deniedTools.length > 0) {
+    const dtKey = `${fileResult.path}:__deniedTools__`;
+    const dtOpen = state.expanded.has(dtKey);
+    const dtArrow = dtOpen ? '▾' : '▸';
+    allNavRows.push({ text: `${RED}${dtArrow} DeniedTools${NC} ${DIM}(${fileResult.deniedTools.length})${NC}`, key: dtKey, isDeny: true });
+    if (dtOpen) {
+      for (const t of fileResult.deniedTools) {
+        const maxLen = w - 10;
+        const name = t.length > maxLen ? t.slice(0, maxLen - 1) + '…' : t;
+        allNavRows.push({ text: `  ${DIM}${name}${NC}`, isDeny: true });
+      }
+    }
+  }
+
+  // AdditionalDirectories section
+  if (fileResult.additionalDirectories.length > 0) {
+    const adKey = `${fileResult.path}:__additionalDirs__`;
+    const adOpen = state.expanded.has(adKey);
+    const adArrow = adOpen ? '▾' : '▸';
+    allNavRows.push({ text: `${DIM}${adArrow} AdditionalDirectories${NC} ${DIM}(${fileResult.additionalDirectories.length})${NC}`, key: adKey, isDeny: true });
+    if (adOpen) {
+      for (const d of fileResult.additionalDirectories) {
+        const maxLen = w - 10;
+        const name = d.length > maxLen ? d.slice(0, maxLen - 1) + '…' : d;
+        allNavRows.push({ text: `  ${DIM}${name}${NC}`, isDeny: true });
       }
     }
   }

@@ -78,6 +78,32 @@ export function printVerbose(results: ScanResult[], summary: AuditSummary): void
         }
       }
     }
+    if (result.askCount > 0) {
+      console.log(`    ${YELLOW}Ask${NC} ${DIM}(${result.askCount})${NC}`);
+      for (const group of result.askGroups) {
+        for (const item of group.items) {
+          console.log(`      ${DIM}ASK   ${item.name}${NC}`);
+        }
+      }
+    }
+    if (result.allowedTools.length > 0) {
+      console.log(`    ${CYAN}AllowedTools${NC} ${DIM}(${result.allowedTools.length})${NC}`);
+      for (const t of result.allowedTools) {
+        console.log(`      ${DIM}${t}${NC}`);
+      }
+    }
+    if (result.deniedTools.length > 0) {
+      console.log(`    ${RED}DeniedTools${NC} ${DIM}(${result.deniedTools.length})${NC}`);
+      for (const t of result.deniedTools) {
+        console.log(`      ${DIM}${t}${NC}`);
+      }
+    }
+    if (result.additionalDirectories.length > 0) {
+      console.log(`    ${DIM}AdditionalDirectories${NC} ${DIM}(${result.additionalDirectories.length})${NC}`);
+      for (const d of result.additionalDirectories) {
+        console.log(`      ${DIM}${d}${NC}`);
+      }
+    }
     console.log('');
   }
 
@@ -90,6 +116,7 @@ export function printFooter(summary: AuditSummary): void {
   console.log(`\n  ${DIM}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}`);
 
   const catSummary = [...summary.categoryTotals.entries()].map(([k, v]) => `${k}: ${BOLD}${v}${NC}${DIM}`).join('  ');
-  const denySuffix = summary.totalDeny > 0 ? `  ${BOLD}${summary.totalDeny}${NC} deny rules` : '';
-  console.log(`  ${BOLD}${summary.totalProjects}${NC} projects  ${BOLD}${summary.totalPerms}${NC} permissions${denySuffix}  ${DIM}(${catSummary})${NC}\n`);
+  const denySuffix = summary.totalDeny > 0 ? `  ${BOLD}${summary.totalDeny}${NC} deny` : '';
+  const askSuffix = summary.totalAsk > 0 ? `  ${BOLD}${summary.totalAsk}${NC} ask` : '';
+  console.log(`  ${BOLD}${summary.totalProjects}${NC} projects  ${BOLD}${summary.totalPerms}${NC} permissions${denySuffix}${askSuffix}  ${DIM}(${catSummary})${NC}\n`);
 }
