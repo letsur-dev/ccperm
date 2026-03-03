@@ -86,6 +86,17 @@ ccperm은 Claude Code 설정을 세 단계로 구분합니다:
 
 권한은 합산 방식 — global + shared + local이 런타임에 병합됩니다.
 
+## Allow vs Deny
+
+Claude Code 설정은 `permissions.allow`와 `permissions.deny`를 모두 지원합니다. ccperm은 이를 명확히 분리합니다:
+
+- **Allow** 권한은 메인 목록에 표시되며, 삭제(`[d]`)나 글로벌 복사(`[g]`)가 가능합니다
+- **Deny** 룰은 상세 뷰에서 접이식 **Deny** 섹션에 `DENY` 태그와 함께 표시됩니다
+- Deny 룰은 **삭제/복사 불가** — 보안 가드레일입니다 (예: `Bash(rm -rf)`, `Write:.env*`)
+- `--verbose` 출력에서 프로젝트별 Deny 섹션이 분리 표시됩니다
+- `--hey-claude-witness-me`에서 deny 룰이 "Protected rules"로 나열됩니다
+- Allow 카운트에 deny 룰은 포함되지 않습니다
+
 ## 위험도 분류
 
 각 권한에 [Destructive Command Guard (DCG)](https://github.com/Dicklesworthstone/destructive_command_guard)에서 영감을 받은 위험도가 부여됩니다. `--hey-claude-witness-me` 출력과 TUI 정보 모드에서 사용됩니다.

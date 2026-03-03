@@ -86,6 +86,17 @@ ccperm distinguishes three levels of Claude Code settings:
 
 Permissions are additive — global + shared + local are merged at runtime.
 
+## Allow vs Deny
+
+Claude Code settings support both `permissions.allow` and `permissions.deny`. ccperm separates them clearly:
+
+- **Allow** permissions are shown in the main list and can be deleted (`[d]`) or copied to global (`[g]`)
+- **Deny** rules appear in a collapsible **Deny** section in detail view, tagged with `DENY` and dimmed
+- Deny rules **cannot be deleted or copied** — they are security guardrails (e.g. `Bash(rm -rf)`, `Write:.env*`)
+- `--verbose` output shows a separate Deny section per project
+- `--hey-claude-witness-me` lists deny rules under "Protected rules"
+- Allow counts never include deny rules
+
 ## Risk Classification
 
 Each permission is assigned a risk level inspired by [Destructive Command Guard (DCG)](https://github.com/Dicklesworthstone/destructive_command_guard). Used in `--hey-claude-witness-me` output and the TUI info mode.
