@@ -106,6 +106,7 @@ function refreshProject(results: ScanResult[], withPerms: FileEntry[], idx: numb
       results[ri] = updated;
       const entry = withPerms[idx];
       entry.totalCount = updated.totalCount;
+      entry.denyCount = updated.denyCount;
       entry.groups = new Map();
       for (const g of updated.groups) entry.groups.set(g.category, g.items.length);
     }
@@ -549,7 +550,7 @@ function renderDetail(state: TuiState, withPerms: FileEntry[], results: ScanResu
   const globalDupSet = new Set(dupInfo.globalDup);
 
   // build navigable rows
-  const allNavRows: { text: string; key?: string; perm?: string; rawPerm?: string }[] = [];
+  const allNavRows: { text: string; key?: string; perm?: string; rawPerm?: string; isDeny?: boolean }[] = [];
   for (const group of fileResult.groups) {
     const key = `${fileResult.path}:${group.category}`;
     const isOpen = state.expanded.has(key);
@@ -583,6 +584,24 @@ function renderDetail(state: TuiState, withPerms: FileEntry[], results: ScanResu
     }
   }
 
+  // Deny section
+  if (fileResult.denyCount > 0) {
+    const denyKey = `${fileResult.path}:__deny__`;
+    const denyOpen = state.expanded.has(denyKey);
+    const denyArrow = denyOpen ? '▾' : '▸';
+    allNavRows.push({ text: `${DIM}${denyArrow} Deny${NC} ${DIM}(${fileResult.denyCount})${NC}`, key: denyKey, isDeny: true });
+    if (denyOpen) {
+      for (const group of fileResult.denyGroups) {
+        for (const item of group.items) {
+          const clean = cleanLabel(item.name);
+          const maxLen = w - 16;
+          const name = clean.length > maxLen ? clean.slice(0, maxLen - 1) + '…' : clean;
+          allNavRows.push({ text: `  ${DIM}DENY  ${name}${NC}`, isDeny: true });
+        }
+      }
+    }
+  }
+
   const navRows = allNavRows;
 
   // handle toggle
@@ -601,7 +620,9 @@ function renderDetail(state: TuiState, withPerms: FileEntry[], results: ScanResu
   if ((state as any)._delete) {
     delete (state as any)._delete;
     const row = navRows[state.detailCursor];
-    if (row?.rawPerm) {
+    if (row?.isDeny) {
+      state.flash = `${DIM}· Deny rules cannot be deleted${NC}`;
+    } else if (row?.rawPerm) {
       state.confirmDelete = { perm: row.perm!, rawPerm: row.rawPerm, filePath: fileResult.path };
     }
   }
@@ -610,7 +631,9 @@ function renderDetail(state: TuiState, withPerms: FileEntry[], results: ScanResu
   if ((state as any)._global) {
     delete (state as any)._global;
     const row = navRows[state.detailCursor];
-    if (row?.rawPerm && !project.isGlobal) {
+    if (row?.isDeny) {
+      state.flash = `${DIM}· Deny rules cannot be copied${NC}`;
+    } else if (row?.rawPerm && !project.isGlobal) {
       state.confirmGlobal = { perm: row.perm!, rawPerm: row.rawPerm };
     }
   }

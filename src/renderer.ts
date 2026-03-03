@@ -1,4 +1,4 @@
-import { YELLOW, CYAN, DIM, BOLD, NC } from './colors.js';
+import { RED, YELLOW, CYAN, DIM, BOLD, NC } from './colors.js';
 import { ScanResult } from './scanner.js';
 import { FileEntry, AuditSummary } from './aggregator.js';
 
@@ -70,6 +70,14 @@ export function printVerbose(results: ScanResult[], summary: AuditSummary): void
         console.log(`      ${DIM}${item.name}${NC}`);
       }
     }
+    if (result.denyCount > 0) {
+      console.log(`    ${RED}Deny${NC} ${DIM}(${result.denyCount})${NC}`);
+      for (const group of result.denyGroups) {
+        for (const item of group.items) {
+          console.log(`      ${DIM}DENY  ${item.name}${NC}`);
+        }
+      }
+    }
     console.log('');
   }
 
@@ -82,5 +90,6 @@ export function printFooter(summary: AuditSummary): void {
   console.log(`\n  ${DIM}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}`);
 
   const catSummary = [...summary.categoryTotals.entries()].map(([k, v]) => `${k}: ${BOLD}${v}${NC}${DIM}`).join('  ');
-  console.log(`  ${BOLD}${summary.totalProjects}${NC} projects  ${BOLD}${summary.totalPerms}${NC} permissions  ${DIM}(${catSummary})${NC}\n`);
+  const denySuffix = summary.totalDeny > 0 ? `  ${BOLD}${summary.totalDeny}${NC} deny rules` : '';
+  console.log(`  ${BOLD}${summary.totalProjects}${NC} projects  ${BOLD}${summary.totalPerms}${NC} permissions${denySuffix}  ${DIM}(${catSummary})${NC}\n`);
 }

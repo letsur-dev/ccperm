@@ -5,6 +5,7 @@ export interface FileEntry {
   shortName: string;
   fileType: 'global' | 'shared' | 'local';
   totalCount: number;
+  denyCount: number;
   groups: Map<string, number>;
   isGlobal: boolean;
 }
@@ -14,6 +15,7 @@ export interface AuditSummary {
   projectsWithPerms: number;
   projectsEmpty: number;
   totalPerms: number;
+  totalDeny: number;
   categoryTotals: Map<string, number>;
 }
 
@@ -35,7 +37,7 @@ export function toFileEntries(results: ScanResult[]): FileEntry[] {
     }
     const fileType = r.isGlobal ? 'global' as const : r.display.includes('settings.local.json') ? 'local' as const : 'shared' as const;
     const name = r.isGlobal ? '~/.claude' : shortPath(r.display);
-    return { display: r.display, shortName: name, totalCount: r.totalCount, groups, isGlobal: r.isGlobal, fileType };
+    return { display: r.display, shortName: name, totalCount: r.totalCount, denyCount: r.denyCount, groups, isGlobal: r.isGlobal, fileType };
   });
 }
 
@@ -52,12 +54,14 @@ export function summarize(results: ScanResult[]): AuditSummary {
   const projectsWithPerms = results.filter((r) => r.totalCount > 0).length;
   const projectsEmpty = results.filter((r) => r.totalCount === 0).length;
   const totalPerms = [...categoryTotals.values()].reduce((a, b) => a + b, 0);
+  const totalDeny = results.reduce((sum, r) => sum + r.denyCount, 0);
 
   return {
     totalProjects: dirs.size,
     projectsWithPerms,
     projectsEmpty,
     totalPerms,
+    totalDeny,
     categoryTotals,
   };
 }

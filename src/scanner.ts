@@ -13,10 +13,12 @@ export interface ScanResult {
   permissions: string[];
   groups: PermGroup[];
   totalCount: number;
+  denyPermissions: string[];
+  denyGroups: PermGroup[];
+  denyCount: number;
   isGlobal: boolean;
 }
 
-const PERM_RE = /"(Bash|Write|Edit|Read|Glob|Grep|WebSearch|WebFetch|mcp_)[^"]*"/g;
 const DEPRECATED_RE = /:\*\)|:\*"/g;
 
 const AUDIT_DIR = path.join(os.homedir(), '.ccperm', 'audit');
@@ -176,13 +178,19 @@ export function scanFile(filePath: string): ScanResult | null {
 
   let content: string;
   try { content = fs.readFileSync(filePath, 'utf8'); } catch { return null; }
+  let json: any;
+  try { json = JSON.parse(content); } catch { return null; }
 
-  const perms = [...new Set((content.match(PERM_RE) || []).map((s) => s.slice(1, -1)))].sort();
+  const allowArr: string[] = Array.isArray(json?.permissions?.allow) ? json.permissions.allow : [];
+  const denyArr: string[] = Array.isArray(json?.permissions?.deny) ? json.permissions.deny : [];
+
+  const perms = [...new Set(allowArr)].sort();
+  const denyPerms = [...new Set(denyArr)].sort();
 
   const groups = groupPermissions(perms);
-  const totalCount = perms.length;
+  const denyGroups = groupPermissions(denyPerms);
 
-  return { path: filePath, display, permissions: perms, groups, totalCount, isGlobal };
+  return { path: filePath, display, permissions: perms, groups, totalCount: perms.length, denyPermissions: denyPerms, denyGroups, denyCount: denyPerms.length, isGlobal };
 }
 
 function categorize(perm: string): { category: string; label: string } {

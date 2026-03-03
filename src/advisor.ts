@@ -45,10 +45,14 @@ export function analyze(results: ScanResult[]): string {
   const critical = findings.filter((f) => f.severity === 'critical');
   const high = findings.filter((f) => f.severity === 'high');
 
+  // Deny stats
+  const totalDeny = results.reduce((sum, r) => sum + r.denyCount, 0);
+
   // Header
   lines.push(`# ccperm: Permission Audit`);
   lines.push(``);
-  lines.push(`Scanned ${results.length} settings files across ${dirs.size} projects. Found ${totalPerms} total permissions.`);
+  const denySuffix = totalDeny > 0 ? `, ${totalDeny} deny rules` : '';
+  lines.push(`Scanned ${results.length} settings files across ${dirs.size} projects. Found ${totalPerms} total permissions${denySuffix}.`);
   lines.push(``);
 
   // Severity summary
@@ -170,6 +174,29 @@ export function analyze(results: ScanResult[]): string {
     lines.push(`## Recommendations`);
     for (let i = 0; i < hints.length; i++) {
       lines.push(`${i + 1}. ${hints[i]}`);
+    }
+    lines.push(``);
+  }
+
+  // Protected rules (deny)
+  const denyFindings: { permission: string; project: string }[] = [];
+  for (const r of results) {
+    const dir = projectDir(r.display).replace(/.*\//, '');
+    for (const g of r.denyGroups) {
+      for (const item of g.items) {
+        denyFindings.push({ permission: item.name, project: dir });
+      }
+    }
+  }
+  if (denyFindings.length > 0) {
+    lines.push(`## Protected rules (deny)`);
+    lines.push(`These deny rules actively block dangerous operations and should not be removed.`);
+    const seen = new Set<string>();
+    for (const f of denyFindings) {
+      const key = `${f.project}:${f.permission}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      lines.push(`- \`${f.permission}\` in ${f.project}`);
     }
     lines.push(``);
   }
